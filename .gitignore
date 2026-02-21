@@ -1,0 +1,16 @@
+# Ignore log files
+*.log
+# Ignore node_modules folder
+node_modules/
+# Ignore Python virtual environment
+.venv/
+# Ignore Ekkono SDK folder
+ekkono-sdk/
+# Ignore build output
+dist/
+build/
+# Ignore environment variables
+env
+# Ignore OS-specific files
+DS_Store
+Thumbs.db
