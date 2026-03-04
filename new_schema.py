@@ -12,61 +12,39 @@ def test(conn):
                     FROM modelhealth 
                     WHERE outlier_score_value < -21;
                     """)
-
+        
+        anomalies = {}
         outlier_information = cur.fetchall()
-        return outlier_information
+        
+        for i, row in enumerate(outlier_information, start=1):
+            anomalies[f"Anomaly {i}"] = {
+                "Outlier Score Value": row[0],
+                "Outlier Score Function": row[1],
+                "MAE": row[2],
+                "MAPE": row[3],
+                "RMSE": row[4]
+            }
+
+        return anomalies, list(anomalies.keys())
+        
+        #anomalies = {}
+        #Count = 0
+        #outlier_information = cur.fetchall()
+        #for row in outlier_information:
+        #    anomaly = {
+        #        "Outlier Score Value": row[0],
+        #        "Outlier Score Function": row[1],
+        #        "MAE": row[2],
+        #        "MAPE": row[3],
+        #        "RMSE": row[4]
+        #    }
+        #    Count += 1
+        #    anomalies[f"Anomaly {Count}"] = anomaly
+        #return anomalies, outlier_information
             
     except sqlite3.Error as e:
         print(f"Error executing outlier query: {e}")
-
-"""
-Diagnostic Schema:
-
-{
-Tag ID: ,
-Device ID: ,
-Local Model ID: , 
-Model Binary ID: ,
-Timestamp: ,
-Anomaly: {
-	Outlier Score Value: ,
-	Outlier Score Function:
-},
-Performance: {
-	MAE: ,
-    MAPE: ,
-    RMSE: 
-},
-Tag Information: {
-    Outlier Tag: {
-	    Key: ,
-	    Value:
-     },
-     Other Device Tags: {
-        Key: ,
-        Value:
-     }
-},
-Local Model Information: {
-	Metrics: {
-	    Name: ,
-	    Value: 
-	},
-    last_train_time: , 
-    is_compatible: , 
-    is_valid
-},
-Model Binary Information: {
-    is_deserializable: ,
-    contains_statistics: ,
-    is_single_target: ,
-    is_producing_predictions:
-},
-Attribute Sensitivities
-}
-"""
-
-#---HELPER FUNCTIONS FOR DIAGNOSTIC SCHEMA ANALYSIS---#
+        return []
 
 def outlier_information(conn, tag_id, device_id, localmodel_id, modelbinary_id, outlier_score_value):
     """Query outlier important information from modelhealth table"""
@@ -79,7 +57,11 @@ def outlier_information(conn, tag_id, device_id, localmodel_id, modelbinary_id, 
                     """)
         
         outlier_information = cur.fetchall()
-
+        
+        timestamp = None
+        anomaly = None
+        performance = None
+        
         for row in outlier_information:
             timestamp = row[0]
             anomaly = {"Outlier Score Value": row[1], "Outlier Score Function": row[2]}
@@ -88,6 +70,7 @@ def outlier_information(conn, tag_id, device_id, localmodel_id, modelbinary_id, 
     
     except sqlite3.Error as e:
         print(f"Error executing outlier query: {e}")
+        return None, None, None
 
 
 def tag_information(conn, tag_id):
@@ -101,13 +84,15 @@ def tag_information(conn, tag_id):
                     """)
         
         tag_information = cur.fetchall()
-
+        
+        tags = {}
         for row in tag_information:
-            tags = {f"{row[0]}": row[1]}
+            tags[f"{row[0]}"] = row[1]
         return tags
     
     except sqlite3.Error as e:
-        print(f"Error executing tag information query: {e}")        
+        print(f"Error executing tag information query: {e}")
+        return {}
 
 def other_tag_information(conn, tag_id, device_id):
     """Query tag information from tag table"""
@@ -129,7 +114,8 @@ def other_tag_information(conn, tag_id, device_id):
         return other_tags
     
     except sqlite3.Error as e:
-        print(f"Error executing tag information query: {e}")        
+        print(f"Error executing tag information query: {e}")
+        return {}
 
 def metric_information(conn, localmodel_id):
     """Query metric information from metric table"""
@@ -150,6 +136,7 @@ def metric_information(conn, localmodel_id):
 
     except sqlite3.Error as e:
         print(f"Error executing metric information query: {e}")
+        return {}
         
 def localmodel_information(conn, localmodel_id):
     """Query local model information from local model table"""
@@ -163,6 +150,10 @@ def localmodel_information(conn, localmodel_id):
         
         localmodel_information = cur.fetchall()
 
+        last_train_time = None
+        is_compatible = None
+        is_valid = None
+        
         for row in localmodel_information:
             last_train_time = row[0]
             is_compatible = row[1]
@@ -171,6 +162,7 @@ def localmodel_information(conn, localmodel_id):
     
     except sqlite3.Error as e:
         print(f"Error executing local model information query: {e}")
+        return None, None, None
 
 def modelbinary_information(conn, modelbinary_id):
     """Query modelbinary information from modelbinary table"""
@@ -185,6 +177,9 @@ def modelbinary_information(conn, modelbinary_id):
         
         modelbinary_information = cur.fetchall()
 
+        modelbinary = None
+        attributes_sensitivities_id = None
+        
         for row in modelbinary_information:
             modelbinary = {"Is Deserializable": row[0], "Contains Statistics": row[1], "Is Single Target": row[2], "Is Producing Predictions": row[3]}
             attributes_sensitivities_id = row[4]   
@@ -192,6 +187,7 @@ def modelbinary_information(conn, modelbinary_id):
     
     except sqlite3.Error as e:
         print(f"Error executing modelbinary information query: {e}")
+        return None, None
         
 def attributes_information(conn, attributes_sensitivities_id):
     """Query attributes information from attributesensitivities table"""
@@ -205,16 +201,17 @@ def attributes_information(conn, attributes_sensitivities_id):
         
         attributes_information = cur.fetchall()
 
+        attributes = None
+        
         for row in attributes_information:
             attributes = json.loads(row[0])
         return attributes
     
     except sqlite3.Error as e:
         print(f"Error executing attributes information query: {e}")
+        return None
 
 
-
-#---DIAGNOSTIC SCHEMA ANALYSIS FUNCTIONS---#
 
 def find_all_outlier_devices(conn):
     """Query outliers from modelhealth table"""
@@ -228,21 +225,20 @@ def find_all_outlier_devices(conn):
                     ORDER BY device_count DESC;""")
         outliers = cur.fetchall()
         
-        for outlier in outliers:
-            print(outlier)
-        return
+        return outliers
     except sqlite3.Error as e:
         print(f"Error finding all the outliers: {e}")
+        return []
         
 def create_single_schema(conn, tag_id, device_id, localmodel_id, modelbinary_id, outlier_score_value):
     """Create a JSON schema of the database"""
     timestamp, anomaly, performance = outlier_information(conn, tag_id, device_id, localmodel_id, modelbinary_id, outlier_score_value)
-    tags = tag_information(conn, tag_id)
-    other_tags = other_tag_information(conn, tag_id, device_id)
-    metrics = metric_information(conn, localmodel_id)
-    last_train_time, is_compatible, is_valid = localmodel_information(conn, localmodel_id)
-    modelbinary, attributes_sensitivities_id = modelbinary_information(conn, modelbinary_id)
-    attributes = attributes_information(conn, attributes_sensitivities_id)
+    tags = tag_information(conn, tag_id) or {}
+    other_tags = other_tag_information(conn, tag_id, device_id) or {}
+    metrics = metric_information(conn, localmodel_id) or {}
+    last_train_time, is_compatible, is_valid = localmodel_information(conn, localmodel_id) or (None, None, None)
+    modelbinary, attributes_sensitivities_id = modelbinary_information(conn, modelbinary_id) or (None, None)
+    attributes = attributes_information(conn, attributes_sensitivities_id) if attributes_sensitivities_id else {}
     schema = {
         "Tag ID": tag_id,
         "Local Model ID": localmodel_id,
@@ -296,8 +292,8 @@ def create_big_schema(conn, device_id, localmodel_id):
                 key = f"Normal data point {count_normal}"
                 value = create_single_schema(conn, row[0], device_id, localmodel_id, row[1], row[2])
                 schema["Normal Data Points"][key] = value
-        print(schema)
         return schema
     
     except sqlite3.Error as e:
         print(f"Error creating big schema: {e}")
+        return {}

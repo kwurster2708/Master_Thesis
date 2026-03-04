@@ -1,1055 +1,154 @@
+import sqlite3
+
+conn = sqlite3.connect(r"\Users\Kim_W\Ekkono_Code\WeatherData.sqlite")
+
+def active_model_id(conn, device_id):
+    """Get the active model ID for a given device"""
+    cur = conn.cursor()
+    try:
+        cur.execute(f"""SELECT id 
+                    FROM localmodel
+                    WHERE device_id = {device_id} 
+                    ORDER BY version_number DESC LIMIT 1;""")
+        row = cur.fetchone()
+        return row[0] if row else None
+    except sqlite3.Error as e:
+        print(f"Error fetching active model ID for Device ID {device_id}: {e}")
+        return None
+
+
+def test1(conn, device_id):
+    """Test if tags have different performance for the same device and model"""
+    cur = conn.cursor()
+    
+    local_model_id = active_model_id(conn, device_id)
+    
+    try:
+        cur.execute(f"""SELECT tag_id, modelbinary_id, outlier_score_value, outlier_score_fn, mae, mape, rmse, analytics_time
+                    FROM modelhealth 
+                    WHERE device_id = {device_id} AND localmodel_id = {local_model_id}
+                    ORDER BY analytics_time DESC;""")
+        
+        results = cur.fetchall()
+        
+        for row in results:
+            print(f"Tag ID: {row[0]}, Model Binary ID: {row[1]}, Outlier Score Value: {row[2]}, Outlier Score Function: {row[3]}, MAE: {row[4]}, MAPE: {row[5]}, RMSE: {row[6]}, Analytics Time: {row[7]}")
+    
+    except sqlite3.Error as e:
+        print(f"Error executing test query: {e}")
+        
+def test2(conn, device_id):
+    """Test if metrics are different for the same device and model across timestamps"""
+    cur = conn.cursor()
+    
+    local_model_id = active_model_id(conn, device_id)
+    
+    try:
+        cur.execute(f"""SELECT name, value, create_time
+                    FROM metric 
+                    WHERE localmodel_id = {local_model_id}
+                    ORDER BY create_time DESC;""")
+        
+        results = cur.fetchall()
+        
+        for row in results:
+            print(f"{row[0]}: {row[1]}, Create Time: {row[2]}")
+    
+    except sqlite3.Error as e:
+        print(f"Error executing test query: {e}")
+        
+def test3(conn):
+    """Print all tables in the database to check for any issues"""
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = cur.fetchall()
+        for table in tables:
+            print(table[0])
+    except sqlite3.Error as e:
+        print(f"Error retrieving table names: {e}")
+
+device = 50   
+#test1(conn, device)
+#test2(conn, device)
+test3(conn)
+
+
 {
-    "Device ID": 3359,
-    "Local Model ID": 19854,
-    "Outliers": {
-        "Outlier 1": {
-            "Tag ID": 7850,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 01:44:51",
-            "Anomaly": {
-                "Outlier Score Value": -5.338720098491163,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 39.03996658325195,
-                "MAPE": 1.993527889251709,
-                "RMSE": 41.578338623046875,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"urbanization": "unknown"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Outlier 2": {
-            "Tag ID": 7850,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 04:12:28",
-            "Anomaly": {
-                "Outlier Score Value": -5.08008713535341,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 38.20207595825195,
-                "MAPE": 2.209549903869629,
-                "RMSE": 40.834373474121094,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"urbanization": "unknown"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
+  "Device Information": {
+    "tags": {
+      "All": "All",
+      "country": "Russian Federation",
+      "terrain": "lowland",
+      "station_id": "RSI0000UHMA",
+      "city": "Anadyr",
+      "tz": "UTC+12",
+      "urbanization": "town",
+      "state": "Chukotka",
+      "name": "UGOLNY"
     },
-    "Normal Data Points": {
-        "Normal data point 1": {
-            "Tag ID": 4292,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 01:44:30",
-            "Anomaly": {
-                "Outlier Score Value": -0.9904068890902682,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 3.272416591644287,
-                "MAPE": 0.9126987457275391,
-                "RMSE": 4.218504905700684,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"state": "Saskatchewan"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 2": {
-            "Tag ID": 3171,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 01:44:40",
-            "Anomaly": {
-                "Outlier Score Value": -1.2061640435435288,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 3.879577398300171,
-                "MAPE": 0.8086496591567993,
-                "RMSE": 6.223020553588867,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"country": "Canada"},
-                "Other Device Tags": {
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 3": {
-            "Tag ID": 8268,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 01:44:47",
-            "Anomaly": {
-                "Outlier Score Value": -1.7409228900446074,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 23.237089157104492,
-                "MAPE": 1.0787632465362549,
-                "RMSE": 27.5930233001709,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"tz": "UTC-6"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 4": {
-            "Tag ID": 10111,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 01:44:56",
-            "Anomaly": {
-                "Outlier Score Value": -1.613074286259642,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 31.622468948364258,
-                "MAPE": 1.6361173391342163,
-                "RMSE": 34.693260192871094,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"terrain": "hill"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 5": {
-            "Tag ID": 1,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 01:45:37",
-            "Anomaly": {
-                "Outlier Score Value": -2.0459257910846267,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 29.632793426513672,
-                "MAPE": 1.682888388633728,
-                "RMSE": 33.45175552368164,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"All": "All"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 6": {
-            "Tag ID": 4292,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 02:25:44",
-            "Anomaly": {
-                "Outlier Score Value": -0.9831416912993285,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 3.2430505752563477,
-                "MAPE": 0.653212308883667,
-                "RMSE": 4.242164134979248,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"state": "Saskatchewan"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 7": {
-            "Tag ID": 3171,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 02:25:55",
-            "Anomaly": {
-                "Outlier Score Value": -1.2354586104978413,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 3.7588436603546143,
-                "MAPE": 0.7894259095191956,
-                "RMSE": 5.684535503387451,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"country": "Canada"},
-                "Other Device Tags": {
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 8": {
-            "Tag ID": 8268,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 02:26:01",
-            "Anomaly": {
-                "Outlier Score Value": -1.7962629824845588,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 24.202335357666016,
-                "MAPE": 1.0715925693511963,
-                "RMSE": 28.514415740966797,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"tz": "UTC-6"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 9": {
-            "Tag ID": 7850,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 02:26:06",
-            "Anomaly": {
-                "Outlier Score Value": -4.970434031404112,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 37.63396072387695,
-                "MAPE": 7.669834613800049,
-                "RMSE": 40.43818664550781,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"urbanization": "unknown"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 10": {
-            "Tag ID": 10111,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 02:26:13",
-            "Anomaly": {
-                "Outlier Score Value": -1.6535304089336993,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 31.96345329284668,
-                "MAPE": 1.4752908945083618,
-                "RMSE": 34.8728141784668,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"terrain": "hill"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 11": {
-            "Tag ID": 1,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 02:26:57",
-            "Anomaly": {
-                "Outlier Score Value": -2.138552072490375,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 30.44951057434082,
-                "MAPE": 1.8862427473068237,
-                "RMSE": 34.18312072753906,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"All": "All"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 12": {
-            "Tag ID": 4292,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 04:12:11",
-            "Anomaly": {
-                "Outlier Score Value": -0.9887187553054089,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 3.393695116043091,
-                "MAPE": 0.6450108289718628,
-                "RMSE": 4.492120265960693,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"state": "Saskatchewan"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 13": {
-            "Tag ID": 3171,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 04:12:22",
-            "Anomaly": {
-                "Outlier Score Value": -1.2231061671949954,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 3.720473289489746,
-                "MAPE": 0.7508165240287781,
-                "RMSE": 5.683250904083252,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"country": "Canada"},
-                "Other Device Tags": {
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 14": {
-            "Tag ID": 8268,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 04:12:25",
-            "Anomaly": {
-                "Outlier Score Value": -1.8020159428093028,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 24.38127899169922,
-                "MAPE": 1.434132695198059,
-                "RMSE": 28.47950553894043,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"tz": "UTC-6"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 15": {
-            "Tag ID": 10111,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 04:12:37",
-            "Anomaly": {
-                "Outlier Score Value": -1.5965700547506079,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 31.651975631713867,
-                "MAPE": 1.9598288536071777,
-                "RMSE": 34.72786331176758,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"terrain": "hill"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
-        "Normal data point 16": {
-            "Tag ID": 1,
-            "Local Model ID": 19854,
-            "Model Binary ID": 19854,
-            "Timestamp": "2024-12-27 04:13:18",
-            "Anomaly": {
-                "Outlier Score Value": -2.131126426212867,
-                "Outlier Score Function": "local_outlier_factor",
-            },
-            "Performance": {
-                "MAE": 30.367319107055664,
-                "MAPE": 1.7667486667633057,
-                "RMSE": 34.120887756347656,
-            },
-            "Tag Information": {
-                "Outlier Tag": {"All": "All"},
-                "Other Device Tags": {
-                    "country": "Canada",
-                    "state": "Saskatchewan",
-                    "station_id": "CAN04016566",
-                    "urbanization": "unknown",
-                    "tz": "UTC-6",
-                    "terrain": "hill",
-                    "city": "Regina",
-                    "name": "REGINA INTL A",
-                },
-            },
-            "Local Model Information": {
-                "Metrics": {
-                    "mae": 4.435588836669922,
-                    "mape": None,
-                    "rmse": 5.762928009033203,
-                    "cde.min": None,
-                    "cde.max": None,
-                    "cde.mean": None,
-                    "cde.std": None,
-                    "cde.force": 1.0,
-                },
-                "Last Train Time": "2019-03-31 22:00:00.000000",
-                "Is Compatible": 1,
-                "Is Valid": 1,
-            },
-            "Model Binary Information": {
-                "Is Deserializable": 1,
-                "Contains Statistics": 1,
-                "Is Single Target": 1,
-                "Is Producing Predictions": 1,
-            },
-            "Attributes Information": {
-                "wind_direction": 0.157879928073434,
-                "wind_speed": 0.12983517601951494,
-                "temperature": 0.5193682232038881,
-                "dew_point_temperature": 0.7037810221964574,
-                "wind_direction-yesterday": 0.13194468072602922,
-                "wind_speed-yesterday": 0.08431058002768062,
-                "temperature-yesterday": 0.15028237610633474,
-                "dew_point_temperature-yesterday": 0.11471122955415862,
-            },
-        },
+    "target": "Temperature"
+  },
+  "Active Model Context": {
+    "version": 37,
+    "is_valid": 1,
+    "is_compatible": 1,
+    "model_age_days": null,
+    "training_recency_bucket": null
+  },
+  "Model Performance Context": {
+    "average metrics": {
+      "MAE": 7.846823160464947,
+      "RMSE": 2.9339656035105386,
+      "MAPE": 8.593677795850313
     },
+    "overall_error_score": 6.314171549965012,
+    "trend": "degrading",
+    "worst_performance_error_score": "2025-01-30 11:08:22",
+    "worst_time_stamp": 6.603918053883438
+  },
+  "Model Version History": {
+    "versions_available": 35,
+    "performance_trend": {
+      "MAE": 4.123225484575544,
+      "MAPE": 5.056853021894183,
+      "RMSE": null
+    }
+  },
+  "Feature Sensitivity": {},
+  "Tag Diagnostics": {
+    "UTC+12": {
+      "performance": 6.277248585087852,
+      "outlier_score_value": -10.153536436984563,
+      "outlier_score": "extreme",
+      "analytics_time": "2024-06-22 22:00:00.000000"
+    },
+    "town": {
+      "performance": 3.016869316223862,
+      "outlier_score_value": -1.0824139690334018,
+      "outlier_score": "moderate",
+      "analytics_time": "2024-06-22 22:00:00.000000"
+    },
+    "All": {
+      "performance": 2.9972391603832618,
+      "outlier_score_value": -1.1073992866289661,
+      "outlier_score": "moderate",
+      "analytics_time": "2024-06-22 22:00:00.000000"
+    },
+    "lowland": {
+      "performance": 2.5180594557200333,
+      "outlier_score_value": -1.1297778478984046,
+      "outlier_score": "moderate",
+      "analytics_time": "2024-06-22 22:00:00.000000"
+    },
+    "Worst Tag": "{'UTC+12'}"
+  },
+  "Cross Tag Context": {
+    "worst_performance_tag": "UTC+12",
+    "worst_performance": 6.277248585087852,
+    "average_performance": 3.7023541293537523,
+    "worst_outlier_tag": "UTC+12",
+    "problem_pattern": "tag_specific",
+    "extreme_outlier_ratio": 0.25
+  }
 }
