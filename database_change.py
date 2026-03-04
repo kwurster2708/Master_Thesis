@@ -489,7 +489,7 @@ def create_device_cross_tag_summary():
 
     conn.commit()
     conn.close()
-                
+#save            
 
 #def create_all_optimized_tables():
     #print("Creating optimized tables...")

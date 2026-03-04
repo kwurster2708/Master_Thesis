@@ -26,7 +26,7 @@ def get_ollama_models():
     except Exception as e:
         st.error(f"Ollama connection failed: {str(e)}")
         return []
-
+#save
 def generate_prompt(prompt_structure, schema_data):
     """Generate prompt based on selected structure and schema data"""
     

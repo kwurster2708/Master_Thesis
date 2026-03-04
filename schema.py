@@ -1,7 +1,7 @@
 import sqlite3
 import json
 from datetime import datetime
-
+#save
 def get_connection():
     return sqlite3.connect(r"\Users\Kim_W\Ekkono_Code\WeatherData.sqlite")
 

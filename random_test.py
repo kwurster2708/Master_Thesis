@@ -16,7 +16,7 @@ def active_model_id(conn, device_id):
         print(f"Error fetching active model ID for Device ID {device_id}: {e}")
         return None
 
-
+#save
 def test1(conn, device_id):
     """Test if tags have different performance for the same device and model"""
     cur = conn.cursor()
