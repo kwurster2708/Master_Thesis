@@ -14,3 +14,6 @@ env
 # Ignore OS-specific files
 DS_Store
 Thumbs.db
+
+Original_DB.sqlite
+WeatherData.sqlite
