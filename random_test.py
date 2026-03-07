@@ -67,88 +67,23 @@ def test3(conn):
             print(table[0])
     except sqlite3.Error as e:
         print(f"Error retrieving table names: {e}")
+        
+def test4(conn):
+  cur = conn.cursor()
+  classification_list = ("Underperforming", "Low Accuracy", "Partial Outlier", "Full Outlier")
+  try:
+      cur.execute(f"""SELECT device_id, outlier_classification
+                    FROM device_outlier_classification 
+                    WHERE outlier_classification IN {classification_list}
+                    ORDER BY device_id;""")
+      rows = cur.fetchall()
+      print(rows)
+      return cur.fetchall()
+  except sqlite3.Error:
+        return []
 
 device = 50   
 #test1(conn, device)
 #test2(conn, device)
-test3(conn)
-
-
-{
-  "Device Information": {
-    "tags": {
-      "All": "All",
-      "country": "Russian Federation",
-      "terrain": "lowland",
-      "station_id": "RSI0000UHMA",
-      "city": "Anadyr",
-      "tz": "UTC+12",
-      "urbanization": "town",
-      "state": "Chukotka",
-      "name": "UGOLNY"
-    },
-    "target": "Temperature"
-  },
-  "Active Model Context": {
-    "version": 37,
-    "is_valid": 1,
-    "is_compatible": 1,
-    "model_age_days": null,
-    "training_recency_bucket": null
-  },
-  "Model Performance Context": {
-    "average metrics": {
-      "MAE": 7.846823160464947,
-      "RMSE": 2.9339656035105386,
-      "MAPE": 8.593677795850313
-    },
-    "overall_error_score": 6.314171549965012,
-    "trend": "degrading",
-    "worst_performance_error_score": "2025-01-30 11:08:22",
-    "worst_time_stamp": 6.603918053883438
-  },
-  "Model Version History": {
-    "versions_available": 35,
-    "performance_trend": {
-      "MAE": 4.123225484575544,
-      "MAPE": 5.056853021894183,
-      "RMSE": null
-    }
-  },
-  "Feature Sensitivity": {},
-  "Tag Diagnostics": {
-    "UTC+12": {
-      "performance": 6.277248585087852,
-      "outlier_score_value": -10.153536436984563,
-      "outlier_score": "extreme",
-      "analytics_time": "2024-06-22 22:00:00.000000"
-    },
-    "town": {
-      "performance": 3.016869316223862,
-      "outlier_score_value": -1.0824139690334018,
-      "outlier_score": "moderate",
-      "analytics_time": "2024-06-22 22:00:00.000000"
-    },
-    "All": {
-      "performance": 2.9972391603832618,
-      "outlier_score_value": -1.1073992866289661,
-      "outlier_score": "moderate",
-      "analytics_time": "2024-06-22 22:00:00.000000"
-    },
-    "lowland": {
-      "performance": 2.5180594557200333,
-      "outlier_score_value": -1.1297778478984046,
-      "outlier_score": "moderate",
-      "analytics_time": "2024-06-22 22:00:00.000000"
-    },
-    "Worst Tag": "{'UTC+12'}"
-  },
-  "Cross Tag Context": {
-    "worst_performance_tag": "UTC+12",
-    "worst_performance": 6.277248585087852,
-    "average_performance": 3.7023541293537523,
-    "worst_outlier_tag": "UTC+12",
-    "problem_pattern": "tag_specific",
-    "extreme_outlier_ratio": 0.25
-  }
-}
+#test3(conn)
+test4(conn)

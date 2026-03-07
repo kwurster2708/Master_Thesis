@@ -26,7 +26,7 @@ def get_ollama_models():
     except Exception as e:
         st.error(f"Ollama connection failed: {str(e)}")
         return []
-#save
+
 def generate_prompt(prompt_structure, schema_data):
     """Generate prompt based on selected structure and schema data"""
     
@@ -67,23 +67,21 @@ st.markdown("An interactive dashboard for using LLMs to explain anomalies in tim
 st.sidebar.header("Filters")
 
 # Filter 1: Outlier selection based on test function
-#all_outliers = get_all_outlier_devices(conn)
-#outliers = all_outliers if all_outliers else []
+all_outliers = get_all_outlier_devices(conn)
+outliers = all_outliers if all_outliers else []
 
-#outlier_options = [f"Device {o[0]}" for o in outliers] if outliers else ["No outliers found"]
-#outlier = st.sidebar.selectbox("Select Device ID", options= ["All"] + outlier_options)
-
-selected_outlier = 2732
+outlier_options = [f"Device {o[0]}" for o in outliers] if outliers else ["No outliers found"]
+outlier = st.sidebar.selectbox("Select Device ID", options= ["All"] + outlier_options)
 
 # Filter 2: Prompt Structure
 prompt_structures = ["Explain Anomaly", "Root Cause Analysis"]
 prompt_structure = st.sidebar.selectbox("Select Prompt Structure", options=prompt_structures)
 
 # Get selected outlier info
-#selected_outlier = None
-#if outlier != "No outliers found" and outlier != "All":
-#    parts = outlier.replace("Device ", "")
-#    selected_outlier = (int(parts[0]))
+selected_outlier = None
+if outlier != "No outliers found" and outlier != "All":
+    parts = outlier.replace("Device ", "")
+    selected_outlier = (int(parts[0]))
 
 # Schema selection checkboxes
 st.sidebar.header("Schema Selection")

@@ -1,7 +1,7 @@
 import sqlite3
 import json
 from datetime import datetime
-#save
+
 def get_connection():
     return sqlite3.connect(r"\Users\Kim_W\Ekkono_Code\WeatherData.sqlite")
 
@@ -20,11 +20,12 @@ Outlier based on the active model for the device.
 def get_all_outlier_devices(conn):
     """Get all available device_ids """
     cur = conn.cursor()
+    classification_list = ("Underperforming", "Low Accuracy", "Partial Outlier", "Full Outlier")
     try:
-        cur.execute("""SELECT DISTINCT device_id 
-                    FROM modelhealth 
-                    WHERE outlier_score_value < -10
-                    ORDER BY device_id, localmodel_id;""")
+        cur.execute(f"""SELECT DISTINCT device_id 
+                    FROM device_outlier_classification 
+                    WHERE outlier_classification IN {classification_list}
+                    ORDER BY device_id;""")
         return cur.fetchall()
     except sqlite3.Error:
         return []

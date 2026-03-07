@@ -17,3 +17,5 @@ Thumbs.db
 
 Original_DB.sqlite
 WeatherData.sqlite
+
+_pycache_/

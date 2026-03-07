@@ -10,14 +10,119 @@ def get_connection():
 # --- Label Active Model in each device --- #
 """Giving the devices/first models lables according to the outliers
 
-Underperforming (49): Skill score below 1.0 - performing worse than predicting the mean 
-Low Accuracy (84): Skill score above 1.0 but high RMSE values 
-Partial Outlier (25): Are outliers for some tags but not all
-Full Outlier (1): Good RMSE but highly different from other models 
+Underperforming (49): Overall Error Score above 1.1 - performing worse than predicting the mean (use overall error score from active model)
+Low Accuracy (84): Overall Error Score 1.1 or below but high RMSE values (for RMSE value use threshold use baseline if 10% higher than baseline - high RMSE)
+Partial Outlier (25): Are outliers for some tags but not all (outlier: warning count above 50% and under 75% and or extreme ratio below 50% and above 25%)
+Full Outlier (1): Good RMSE but highly different from other models (extreme ratio above 50% or warning count above 75%)
 No Outlier: Does not belong to any of the above categories based on the outlier score value
 
 Outlier based on the active model for the device.
 """
+
+def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute("DROP TABLE IF EXISTS device_outlier_classification")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS device_outlier_classification (
+            device_id INT PRIMARY KEY,
+            localmodel_id INT,
+            outlier_classification VARCHAR(50),
+            version_number INT,
+            skill_score REAL,
+            rmse_value REAL,
+            outlier_score_value REAL
+        )
+    """)
+
+    cursor.execute("""
+        SELECT AVG(avg_rmse) as baseline_rmse FROM (
+            SELECT AVG(rmse) as avg_rmse
+            FROM device_tag_diagnostics dtd
+            JOIN active_model_lookup aml ON dtd.device_id = aml.device_id AND dtd.localmodel_id = aml.localmodel_id
+            GROUP BY aml.device_id
+        )
+    """)
+    baseline_rmse = cursor.fetchone()[0]
+    high_rmse_threshold = baseline_rmse * 2.24
+
+    skill_threshold = 0.54
+    
+    cursor.execute("""
+        SELECT 
+            aml.device_id,
+            aml.localmodel_id,
+            aml.version_number,
+            dcts.average_tag_performance as skill_score,
+            dcts.worst_tag_outlier,
+            (SELECT AVG(rmse) FROM device_tag_diagnostics WHERE device_id = aml.device_id AND localmodel_id = aml.localmodel_id) as avg_rmse
+        FROM active_model_lookup aml
+        JOIN device_cross_tag_summary dcts ON aml.device_id = dcts.device_id AND aml.localmodel_id = dcts.localmodel_id
+    """)
+    device_data = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT 
+            aml.device_id,
+            COUNT(*) as total_tags,
+            SUM(CASE WHEN dtd.outlier_score IN ('strong', 'extreme') THEN 1 ELSE 0 END) as warning_count
+        FROM active_model_lookup aml
+        JOIN device_tag_diagnostics dtd ON aml.device_id = dtd.device_id AND dtd.localmodel_id = aml.localmodel_id
+        WHERE aml.device_id = dtd.device_id AND aml.localmodel_id = dtd.localmodel_id
+        GROUP BY aml.device_id
+    """)
+    warning_data = {r[0]: (r[1], r[2]) for r in cursor.fetchall()}
+
+    classifications = []
+    for row in device_data:
+        device_id, localmodel_id, version_number, skill_score, worst_outlier, avg_rmse = row
+
+        total_tags, warning_count = warning_data.get(device_id, (0, 0))
+        warning_pct = (warning_count / total_tags * 100) if total_tags > 0 else 0
+
+        classification = "No Outlier"
+
+        if skill_score is not None and skill_score < skill_threshold:
+            classification = "Underperforming"
+        elif skill_score is not None and avg_rmse is not None and avg_rmse > high_rmse_threshold:
+            classification = "Low Accuracy"
+        elif 50 <= warning_pct < 75:
+            classification = "Partial Outlier"
+        elif warning_pct >= 75:
+            classification = "Full Outlier"
+
+        classifications.append((
+            device_id,
+            localmodel_id,
+            classification,
+            version_number,
+            skill_score,
+            avg_rmse,
+            warning_pct
+        ))
+
+    cursor.executemany("""
+        INSERT INTO device_outlier_classification 
+        (device_id, localmodel_id, outlier_classification, version_number, skill_score, rmse_value, outlier_score_value)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, classifications)
+
+    conn.commit()
+
+    cursor.execute("""
+        SELECT outlier_classification, COUNT(*) 
+        FROM device_outlier_classification 
+        GROUP BY outlier_classification
+        ORDER BY COUNT(*) DESC
+    """)
+    print("\nClassification Summary:")
+    for row in cursor.fetchall():
+        print(f"  {row[0]}: {row[1]}")
+
+    conn.close()
+    print("\n ✓ Table 'device_outlier_classification' created successfully.")
+
 
 # --- CREATING NEW TABLES IN DATABASE --- #
 
@@ -489,6 +594,7 @@ def create_device_cross_tag_summary():
 
     conn.commit()
     conn.close()
+    print("✓ device_cross_tag_diagnostics table created")
 #save            
 
 #def create_all_optimized_tables():
@@ -508,3 +614,4 @@ def create_device_cross_tag_summary():
     #print("All tables created successfully!")
     
 #create_all_optimized_tables()
+#create_outlier_classification_table()
