@@ -230,7 +230,7 @@ def get_cross_tag_context(conn, device_id):
     try:
         cur.execute(f"""SELECT worst_tag_performance, average_tag_performance, worst_tag_outlier,
                     average_tag_outlier, problem_pattern, 
-                    worst_perf_tag, worst_outlier_tag, extreme_ratio
+                    worst_perf_tag, worst_outlier_tag, extreme_strong_ratio
                     FROM device_cross_tag_summary
                     WHERE device_id = {device_id};""")
         row = cur.fetchone()
@@ -240,8 +240,8 @@ def get_cross_tag_context(conn, device_id):
         
         return {
             "worst_performance_tag": row[5],
-            "worst_performance": row[0],
-            "average_performance": row[1],
+            #"worst_performance": row[0],
+            #"average_performance": row[1],
             "worst_outlier_tag": row[6],
             #"worst_outlier_score": row[2],
             #"average_outlier_score": row[3],
@@ -270,8 +270,9 @@ def get_full_schema(conn, device_id, include_model_performance=True,
     if include_feature_sensitivity:
         schema["Feature Sensitivity"] = get_feature_sensitivity(conn, device_id)
     
-    schema["Tag Diagnostics"] = get_tag_diagnostics(conn, device_id)
-    
+    if include_model_performance:
+        schema["Tag Diagnostics"] = get_tag_diagnostics(conn, device_id)
+        
     schema["Cross Tag Context"] = get_cross_tag_context(conn, device_id)
     
     return schema
