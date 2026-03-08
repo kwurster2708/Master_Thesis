@@ -43,13 +43,12 @@ def get_device_information(conn, device_id):
                     FROM tag
                     WHERE id IN (SELECT tag_id
                                 FROM devicetaglink
-                                WHERE device_id = {device_id});
+                                WHERE device_id = {device_id}) AND key <> 'All';
                     """)
         tags_dict = {r[0]: r[1] for r in cur.fetchall()}
                 
         return {
-                "tags": tags_dict,
-                "target": "Temperature" #There is just one target in the dataset, so no need to query it
+                "tags": tags_dict
             }
     except sqlite3.Error:
         print(f"Error executing diagnostic event query for Device ID {device_id}")
@@ -77,14 +76,14 @@ def get_model_context(conn, device_id):
             if row[4] and row[1]:
                 try:
                     analytics_dt = datetime.strptime(str(row[4]), "%Y-%m-%d %H:%M:%S")
-                    train_dt = datetime.strptime(str(row[1]), "%Y-%m-%d %H:%M:%S")
+                    train_dt = datetime.strptime(str(row[1]), "%Y-%m-%d %H:%M:%S.%f")
                     model_age_days = (analytics_dt - train_dt).days
                     
-                    if model_age_days < 7:
+                    if model_age_days < 182: #half a year
                         training_recency_bucket = "fresh"
-                    elif model_age_days < 30:
+                    elif model_age_days < 365: #one year
                         training_recency_bucket = "recent"
-                    elif model_age_days < 90:
+                    elif model_age_days < 547: #1.5 years
                         training_recency_bucket = "stale"
                     else:
                         training_recency_bucket = "outdated"
@@ -145,7 +144,7 @@ def get_model_version_history(conn, device_id):
         
         return {
            "versions_available": row[0],
-           "performance_trend": { 
+           "average_performance": { 
                "MAE": row[1],
                "MAPE": row[2],
                "RMSE": row[3]

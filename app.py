@@ -28,7 +28,7 @@ def get_ollama_models():
         return []
 
 def generate_prompt(prompt_structure, schema_data):
-    """Generate prompt based on selected structure and schema data"""
+    """Generate prompt based on selected structure and schema data""" #include that temperature is the target variable for the Machine Learning Models
     
     structures = {
         "Explain Anomaly": f"""You are a data science expert. Analyze the following outlier detected in a weather station time series prediction model.

@@ -132,7 +132,7 @@ def get_baseline_values():
     conn = get_connection()
     df = pd.read_sql("""
         SELECT name, value FROM metric 
-        WHERE name IN ('mae', 'rmse', 'mape')
+        WHERE name IN ('mae', 'rmse', 'mape') AND value <> 0
     """, conn)
     
     baselines = {}
@@ -179,7 +179,7 @@ def create_model_performance_pivot():
     baselines = get_baselines()
     
     df = pd.read_sql("""SELECT localmodel_id, name, value
-                     FROM metric WHERE name IN ('mae', 'rmse', 'mape')""", conn)
+                     FROM metric WHERE name IN ('mae', 'rmse', 'mape') """, conn)
     pivot = df.pivot_table(index="localmodel_id", columns="name", values="value",
                            aggfunc = 'mean').reset_index()
     
