@@ -161,10 +161,10 @@ def get_feature_sensitivity(conn, device_id):
     cur = conn.cursor()
     try:
         cur.execute(f"""SELECT fst.top_feature_1, fst.importance_1, 
-                    fst.top_feature_2, fst.importance_2
+                    fst.top_feature_2, fst.importance_2,
                     fst.top_feature_3, fst.importance_3
                     FROM active_model_lookup aml
-                    JOIN feature_sensitivity_top3 ON
+                    JOIN feature_sensitivity_top3 fst ON
                     aml.modelbinary_id = fst.modelbinary_id
                     WHERE aml.device_id = {device_id}""")
         row = cur.fetchone()
@@ -173,22 +173,26 @@ def get_feature_sensitivity(conn, device_id):
         
         if row:
             for i in range(3):
-                if row[i*2]: top_features.append({row[i*2]: row[i*2+1]})
+                if row[i*2+1]: top_features.append({row[i*2]: row[i*2+1]})
         
-        cur.execute(f"""SELECT fsh.hist_top_1, fsh.hist_sens_1, 
-                    fsh.hist_top_2, fsh.hist_sens_2, 
-                    fsh.hist_top_3, fsh.hist_sens_3
-                    FROM feature_sensitivity_historical fsh
-                    WHERE fsh.device_id = {device_id}""")
+        cur.execute(f"""SELECT hist_top_1, hist_sens_1, 
+                    hist_top_2, hist_sens_2, 
+                    hist_top_3, hist_sens_3
+                    FROM feature_sensitivity_historical
+                    WHERE device_id = {device_id}""")
         row = cur.fetchone()
-        hist3 = []
+        
+        hist_features = []
         if row:
             for i in range(3):
-                if row[i*2]: hist3.append({row[i*2]: row[i*2+1]})
+                if row[i*2+1]: hist_features.append({row[i*2]: row[i*2+1]})
+        
+        top3 = {k: v for d in top_features for k, v in d.items()}
+        hist3 = {k: v for d in hist_features for k, v in d.items()}
         
         return {
-            "top_3_features": top_features,
-            "historical_model_contribution": hist3
+            "top_3_features": top3,
+            "average_historical_model_contribution": hist3
         }
     except sqlite3.Error:
         return {}
@@ -272,12 +276,3 @@ def get_full_schema(conn, device_id, include_model_performance=True,
     schema["Cross Tag Context"] = get_cross_tag_context(conn, device_id)
     
     return schema
-
-
-
-#--- Test Space ---#
-conn = sqlite3.connect(r"\Users\Kim_W\Ekkono_Code\WeatherData.sqlite")
-device = 2732
-
-schema = get_full_schema(conn, device)
-print(json.dumps(schema, indent=2, default=str))

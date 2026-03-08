@@ -15,7 +15,9 @@ env
 DS_Store
 Thumbs.db
 
+#Ignore Databases
 Original_DB.sqlite
 WeatherData.sqlite
 
-_pycache_/
+#Ignore Pycache
+__pycache__/

@@ -308,9 +308,14 @@ def create_version_history_performance():
 # --- Model Feature Importance Table --- #
 def create_feature_sensitivity_top3():
     conn = get_connection()
-    df = pd.read_sql("""SELECT id, attribute_sensitivities
-                     FROM attributesensitivities WHERE 
-                     attribute_sensitivities IS NOT NULL;""", conn)
+    cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS device_outlier_classification")
+    df = pd.read_sql("""SELECT mb.id, att.attribute_sensitivities
+                     FROM attributesensitivities att
+                     INNER JOIN (SELECT id, attribute_sensitivities_id
+                     FROM modelbinary
+                     GROUP BY id) mb on mb.attribute_sensitivities_id = att.id
+                     WHERE att.attribute_sensitivities IS NOT NULL;""", conn)
     results = []
     for _, row in df.iterrows():
         try:
@@ -327,7 +332,7 @@ def create_feature_sensitivity_top3():
                                 "importance_3": sorted_attrs[2][1] if len(sorted_attrs) > 2 else None})
         except: pass
     pd.DataFrame(results).to_sql("feature_sensitivity_top3", conn, if_exists="replace", index=False)
-    cur = conn.cursor()
+    
     cur.execute("""CREATE INDEX IF NOT EXISTS 
                     idx_fst_modelbinary ON feature_sensitivity_top3 (modelbinary_id);""")
     conn.commit()
@@ -338,15 +343,27 @@ def create_feature_sensitivity_top3():
 def create_feature_sensitivity_historical():
     """Average feature sensitivity across all previous (non-active) versions"""
     conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS device_outlier_classification")
     
     df = pd.read_sql("""
         SELECT 
+            device_id,
+            attribute_sensitivities_id,
+            attr_json
+        FROM (SELECT 
             lm.device_id,
+            lm.version_number,
             mb.attribute_sensitivities_id,
-            as_attr.attribute_sensitivities AS attr_json
+            as_attr.attribute_sensitivities AS attr_json,
+            ROW_NUMBER() OVER (
+            PARTITION BY lm.device_id 
+            ORDER BY lm.version_number DESC
+            ) AS rn
         FROM localmodel lm
         JOIN modelbinary mb ON lm.modelbinary_id = mb.id
-        JOIN attributesensitivities as_attr ON mb.attribute_sensitivities_id = as_attr.id
+        JOIN attributesensitivities as_attr ON mb.attribute_sensitivities_id = as_attr.id)
+        WHERE rn > 1
     """, conn)
     
     all_attrs = {}
@@ -376,7 +393,6 @@ def create_feature_sensitivity_historical():
         })
     
     pd.DataFrame(results).to_sql('feature_sensitivity_historical', conn, if_exists='replace', index=False)
-    cur = conn.cursor()
     cur.execute("CREATE INDEX IF NOT EXISTS idx_fsh_device ON feature_sensitivity_historical(device_id);")
     conn.commit()
     conn.close()
