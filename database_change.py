@@ -202,6 +202,8 @@ def create_model_performance_trend():
     """Calculate performance trend based on recent vs older metrics"""
     conn = get_connection()
     
+    cur.execute("DROP TABLE IF EXISTS model_performance_trend")
+    
     df = pd.read_sql("""
         SELECT localmodel_id,
             update_time,
@@ -271,7 +273,10 @@ def create_model_performance_trend():
 # --- Device Model Version History Table --- #
 def create_version_history_performance():
     conn = get_connection()
-    # Get all models EXCEPT the active one per device
+    
+    cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS version_history_performance")
+    
     df = pd.read_sql("""
         SELECT 
             lm.device_id,
@@ -299,7 +304,7 @@ def create_version_history_performance():
     results = results.merge(version_count, on='device_id')
     
     results.to_sql('version_history_performance', conn, if_exists='replace', index=False)
-    cur = conn.cursor()
+    
     cur.execute("CREATE INDEX IF NOT EXISTS idx_vhp_device ON version_history_performance(device_id);")
     conn.commit()
     conn.close()
@@ -309,7 +314,7 @@ def create_version_history_performance():
 def create_feature_sensitivity_top3():
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS device_outlier_classification")
+    cur.execute("DROP TABLE IF EXISTS feature_sensitivity_top3")
     df = pd.read_sql("""SELECT mb.id, att.attribute_sensitivities
                      FROM attributesensitivities att
                      INNER JOIN (SELECT id, attribute_sensitivities_id
@@ -344,7 +349,7 @@ def create_feature_sensitivity_historical():
     """Average feature sensitivity across all previous (non-active) versions"""
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS device_outlier_classification")
+    cur.execute("DROP TABLE IF EXISTS feature_sensitivity_historical")
     
     df = pd.read_sql("""
         SELECT 
@@ -403,6 +408,7 @@ def create_device_tag_diagnostics():
     conn = get_connection()
     cur = conn.cursor()
     baselines = get_baselines()
+    cur.execute("DROP TABLE IF EXISTS device_tag_diagnosticsS")
     
     cur.execute("""CREATE TABLE IF NOT EXISTS device_tag_diagnostics AS
                 WITH ranked AS (
@@ -411,7 +417,7 @@ def create_device_tag_diagnostics():
                 mh.mae, mh.mape, mh.rmse, mh.outlier_score_value,
                 
                 ROW_NUMBER() OVER (
-                PARTITION BY mh.device_id, mh.localmodel_id, mh.tag_id
+                PARTITION BY mh.device_id, mh.tag_id
                 ORDER BY mh.analytics_time DESC
                 ) AS rn
 
@@ -457,6 +463,7 @@ def create_device_tag_diagnostics():
 def create_device_cross_tag_summary():
     conn = get_connection()
     cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS device_cross_tag_summary")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS device_cross_tag_summary AS
 
@@ -504,8 +511,7 @@ def create_device_cross_tag_summary():
             MIN(outlier_score_value) AS worst_tag_outlier,
             AVG(outlier_score_value) AS average_tag_outlier,
 
-            SUM(CASE WHEN outlier_score='extreme' THEN 1 ELSE 0 END) AS extreme_count,
-            SUM(CASE WHEN outlier_score IN ('strong','moderate') THEN 1 ELSE 0 END) AS warning_count,
+            SUM(CASE WHEN outlier_score IN ('extreme', 'strong') THEN 1 ELSE 0 END) AS extreme_strong_count,
             COUNT(tag_id) AS tag_count
 
         FROM base
@@ -556,15 +562,15 @@ def create_device_cross_tag_summary():
         worst_out.worst_out_rmse,
         worst_out.worst_out_mape,
 
-        CAST(extreme_count AS FLOAT)/tag_count AS extreme_ratio,
+        CAST(extreme_strong_count AS FLOAT)/tag_count AS extreme_strong_ratio,
 
         CASE
 
             /* DEVICE ISSUE
                bad performance across many tags
             */
-            WHEN (CAST(extreme_count AS FLOAT)/tag_count) >= 0.5
-                 AND agg.average_tag_performance > 1.0
+            WHEN (CAST(extreme_strong_count AS FLOAT)/tag_count) >= 0.5
+                 AND agg.average_tag_performance > 1.2
             THEN 'device_specific'
 
 
@@ -574,20 +580,20 @@ def create_device_cross_tag_summary():
 
 
             /* BAD performance but few outliers */
-            WHEN agg.average_tag_performance > 1.0
-                 AND (CAST(extreme_count AS FLOAT)/tag_count) < 0.2
+            WHEN agg.average_tag_performance > 1.2
+                 AND (CAST(extreme_strong_count AS FLOAT)/tag_count) < 0.2
             THEN 'tag_specific'
 
 
             /* GOOD performance and few outliers */
-            WHEN agg.average_tag_performance < 1.0
-                 AND (CAST(extreme_count AS FLOAT)/tag_count) < 0.2
+            WHEN agg.average_tag_performance < 1.2
+                 AND (CAST(extreme_strong_count AS FLOAT)/tag_count) < 0.2
             THEN 'non_specific'
 
 
             /* MANY outliers but predictions still good */
-            WHEN agg.average_tag_performance < 1.0
-                 AND (CAST(extreme_count AS FLOAT)/tag_count) >= 0.3
+            WHEN agg.average_tag_performance < 1.2
+                 AND (CAST(extreme_strong_count AS FLOAT)/tag_count) >= 0.3
             THEN 'model_behavior_change'
 
             ELSE 'uncertain'
@@ -610,24 +616,23 @@ def create_device_cross_tag_summary():
 
     conn.commit()
     conn.close()
-    print("✓ device_cross_tag_diagnostics table created")
-#save            
+    print("✓ device_cross_tag_diagnostics table created")            
 
-#def create_all_optimized_tables():
-    #print("Creating optimized tables...")
-    #print("=" * 60)
+def create_all_optimized_tables():
+    print("Creating optimized tables...")
+    print("=" * 60)
     
-    #create_active_model_lookup()
-    #create_model_performance_pivot()
-    #create_model_performance_trend()
-    #create_device_tag_diagnostics()
-    #create_feature_sensitivity_top3()
-    #create_feature_sensitivity_historical()
-    #create_device_cross_tag_summary()
-    #create_version_history_performance()
+    create_active_model_lookup()
+    create_model_performance_pivot()
+    create_model_performance_trend()
+    create_device_tag_diagnostics()
+    create_feature_sensitivity_top3()
+    create_feature_sensitivity_historical()
+    create_device_cross_tag_summary()
+    create_version_history_performance()
     
-    #print("=" * 60)
-    #print("All tables created successfully!")
+    print("=" * 60)
+    print("All tables created successfully!")
     
 #create_all_optimized_tables()
 #create_outlier_classification_table()
