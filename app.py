@@ -6,11 +6,10 @@ import ollama
 import json
 
 #-- Helper Functions --
-def create_logging (model_used, schema, device_id, prompt_variant):
+def create_logging (model_used, schema, device_id):
     log ={"model_used": model_used,
         "included_information": list(schema.keys()),
-        "anomaly_id": f"d{device_id}",
-        "prompt_variantyyy": prompt_variant}
+        "anomaly_id": f"d{device_id}"}
     return log
 
 def get_ollama_models():
@@ -27,30 +26,16 @@ def get_ollama_models():
         st.error(f"Ollama connection failed: {str(e)}")
         return []
 
-def generate_prompt(prompt_structure, schema_data):
-    """Generate prompt based on selected structure and schema data""" #include that temperature is the target variable for the Machine Learning Models
-    
-    structures = {
-        "Explain Anomaly": f"""You are a data science expert. Analyze the following outlier detected in a weather station time series prediction model.
+def generate_prompt(schema_data):
+    """Generate prompt based on selected structure and schema data"""     
+    structure =f"""You are a data science expert. Analyze the following outlier detected in a weather station time series prediction model.
 
 Diagnostic Schema:
 {json.dumps(schema_data, indent=2, default=list)}
 
-Please explain why this anomaly occurred and what it means for the weather station's prediction model.""",
-        
-        "Root Cause Analysis": f"""Analyze the root cause of the following outlier in a weather prediction model.
-
-Diagnostic Schema:
-{json.dumps(schema_data, indent=2, default=list)}
-
-Provide a detailed root cause analysis focusing on:
-1. Potential sensor issues
-2. Model performance issues
-3. Data quality problems"""
-}
+Please explain why this anomaly occurred and what it means for the weather station's prediction model."""
     
-    return structures.get(prompt_structure, structures["Explain Anomaly"])
-
+    return structure
 #-- The Dashboard --
 
 # 1. Data Layer
@@ -72,10 +57,6 @@ outliers = all_outliers if all_outliers else []
 
 outlier_options = [f"Device {o[0]}" for o in outliers] if outliers else ["No outliers found"]
 outlier = st.sidebar.selectbox("Select Device ID", options= ["All"] + outlier_options)
-
-# Filter 2: Prompt Structure
-prompt_structures = ["Explain Anomaly", "Root Cause Analysis"]
-prompt_structure = st.sidebar.selectbox("Select Prompt Structure", options=prompt_structures)
 
 # Get selected outlier info
 selected_outlier = None
@@ -105,7 +86,7 @@ left_col, right_col = st.columns([2,2])
 with left_col:
     st.subheader("Prompt Preview")
     if schema_data:
-        prompt_preview = generate_prompt(prompt_structure, schema_data)
+        prompt_preview = generate_prompt(schema_data)
         
         # Force update of session state
         st.session_state["prompt_preview"] = prompt_preview
@@ -133,10 +114,10 @@ with right_col:
     # Button to run LLM
     if st.button("Generate LLM Output"):
         if schema_data:
-            prompt_preview = generate_prompt(prompt_structure, schema_data)
+            prompt_preview = generate_prompt(schema_data)
             
             #-- Logging Information --
-            logs =create_logging(selected_model, schema_data, selected_outlier, prompt_structure)
+            logs =create_logging(selected_model, schema_data, selected_outlier)
                          
             #-- Generate LLM Output --
             try:
