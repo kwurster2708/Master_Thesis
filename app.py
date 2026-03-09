@@ -28,9 +28,12 @@ def get_ollama_models():
 
 def generate_prompt(schema_data):
     """Generate prompt based on selected structure and schema data"""     
-    structure =f"""You are a data science expert. Analyze the following outlier detected in a weather station time series prediction model.
+    structure =f"""Provide an easy explanation on why the following Weather Station is classified as an outlier that an engineer working with the Weather Station can understand. 
+    It is the 22nd June 2024 and the target variable for the machine learning model is the temperature. Each Weather Station has one active model which is indicated by having the highest version number. 
+    There is also data on the previous models regarding feature sensitivity and performance. Every device has multiple tags that show the attributes of the device. 
+    For each tag on the device a exists to different timestamps that show how different it is to the devices with the same tag. 
 
-Diagnostic Schema:
+Provide an explanation based on the following Schema:
 {json.dumps(schema_data, indent=2, default=list)}
 
 Please explain why this anomaly occurred and what it means for the weather station's prediction model."""
