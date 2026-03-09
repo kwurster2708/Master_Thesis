@@ -65,7 +65,7 @@ outlier = st.sidebar.selectbox("Select Device ID", options= ["All"] + outlier_op
 selected_outlier = None
 if outlier != "No outliers found" and outlier != "All":
     parts = outlier.replace("Device ", "")
-    selected_outlier = (int(parts[0]))
+    selected_outlier = int(parts)
 
 # Schema selection checkboxes
 st.sidebar.header("Schema Selection")
