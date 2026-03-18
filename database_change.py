@@ -7,6 +7,41 @@ from datetime import datetime
 def get_connection():
     return sqlite3.connect(r"\Users\Kim_W\Ekkono_Code\WeatherData.sqlite")
 
+# --- Create Helper Functions --- #
+def get_rmse_values():
+    """Calculate baseline values (medians) from all models for normalization"""
+    conn = get_connection()
+    
+    cur = conn.cursor()
+
+    cur.execute("""
+    SELECT 
+        AVG(CASE WHEN name = 'rmse' THEN value END),
+        MAX(CASE WHEN name = 'rmse' THEN value END),
+        MIN(CASE WHEN name = 'rmse' THEN value END)
+    FROM metric;
+    """)
+    result = cur.fetchone()
+    
+    rmse = {
+        "avg": result[0],
+        "max": result[1],
+        "min": result[2]
+    }
+    
+    conn.close()
+    return rmse
+
+
+RMSE = None  # Will be populated on first use
+
+def get_rmse():
+    global RMSE
+    if RMSE is None:
+        RMSE = get_rmse_values()
+    return RMSE
+
+
 # --- Label Active Model in each device --- #
 """Giving the devices/first models lables according to the outliers
 
@@ -21,103 +56,108 @@ Outlier based on the active model for the device.
 
 def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
     conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    rmse = get_rmse()
+    cur = conn.cursor()
 
-    cursor.execute("DROP TABLE IF EXISTS device_outlier_classification")
-    cursor.execute("""
+    cur.execute("DROP TABLE IF EXISTS device_outlier_classification")
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS device_outlier_classification (
             device_id INT PRIMARY KEY,
             localmodel_id INT,
             outlier_classification VARCHAR(50),
-            version_number INT,
             skill_score REAL,
             rmse_value REAL,
-            outlier_score_value REAL
+            outlier_ratio REAL
         )
     """)
 
-    cursor.execute("""
-        SELECT AVG(avg_rmse) as baseline_rmse FROM (
-            SELECT AVG(rmse) as avg_rmse
-            FROM device_tag_diagnostics dtd
-            JOIN active_model_lookup aml ON dtd.device_id = aml.device_id AND dtd.localmodel_id = aml.localmodel_id
-            GROUP BY aml.device_id
-        )
-    """)
-    baseline_rmse = cursor.fetchone()[0]
-    high_rmse_threshold = baseline_rmse * 2.24
+    cur.execute("""
+    SELECT
+        aml.device_id,
+        aml.localmodel_id,
+        
+    (SELECT value FROM metric 
+     WHERE name = 'rmse' 
+     AND localmodel_id = aml.localmodel_id 
+     ORDER BY update_time DESC LIMIT 1) AS local_rmse,
 
-    skill_threshold = 0.54
+    (SELECT value FROM metric 
+     WHERE name = 'cde.std' 
+     AND localmodel_id = aml.localmodel_id 
+     ORDER BY update_time DESC LIMIT 1) AS local_std
+
+    FROM active_model_lookup aml;
+    """)
     
-    cursor.execute("""
-        SELECT 
-            aml.device_id,
-            aml.localmodel_id,
-            aml.version_number,
-            dcts.average_tag_performance as skill_score,
-            dcts.worst_tag_outlier,
-            (SELECT AVG(rmse) FROM device_tag_diagnostics WHERE device_id = aml.device_id AND localmodel_id = aml.localmodel_id) as avg_rmse
-        FROM active_model_lookup aml
-        JOIN device_cross_tag_summary dcts ON aml.device_id = dcts.device_id AND aml.localmodel_id = dcts.localmodel_id
-    """)
-    device_data = cursor.fetchall()
-
-    cursor.execute("""
+    data = cur.fetchall()
+    
+    high_rmse_threshold = rmse['avg'] * 3.5 # the multiplicator is chosen by me
+    skill_threshold = 1.0 # this threshold is given by the Case Study
+    
+    cur.execute("""
         SELECT 
             aml.device_id,
             COUNT(*) as total_tags,
-            SUM(CASE WHEN dtd.outlier_score IN ('strong', 'extreme') THEN 1 ELSE 0 END) as warning_count
+            SUM(CASE WHEN dtd.outlier_score IN ('moderate', 'strong', 'extreme') THEN 1 ELSE 0 END) as warning_count
         FROM active_model_lookup aml
         JOIN device_tag_diagnostics dtd ON aml.device_id = dtd.device_id AND dtd.localmodel_id = aml.localmodel_id
-        WHERE aml.device_id = dtd.device_id AND aml.localmodel_id = dtd.localmodel_id
-        GROUP BY aml.device_id
+        GROUP BY aml.device_id, aml.localmodel_id
     """)
-    warning_data = {r[0]: (r[1], r[2]) for r in cursor.fetchall()}
+    warning_data = {r[0]: (r[1], r[2]) for r in cur.fetchall()}
 
     classifications = []
-    for row in device_data:
-        device_id, localmodel_id, version_number, skill_score, worst_outlier, avg_rmse = row
+    for row in data:
+        device_id, localmodel_id, local_rmse, local_std = row
+        
+        if local_rmse is None:
+            continue
+        
+        skill_score = (local_rmse/rmse['avg']) * 2.2
+        #if local_std is not None:
+            #skill_score = local_std/((local_rmse - rmse['min'])/(rmse['max'] - rmse['min'])) #this calculation is chosen by me
+        # else:
+        #     skill_score = 1.0/((local_rmse - rmse['min'])/(rmse['max'] - rmse['min'])) #this calculation is chosen by me
 
         total_tags, warning_count = warning_data.get(device_id, (0, 0))
-        warning_pct = (warning_count / total_tags * 100) if total_tags > 0 else 0
+        warning_pct = (warning_count / total_tags) if total_tags > 0 else 0
 
         classification = "No Outlier"
 
-        if skill_score is not None and skill_score < skill_threshold:
+        if skill_score < skill_threshold:
             classification = "Underperforming"
-        elif skill_score is not None and avg_rmse is not None and avg_rmse > high_rmse_threshold:
+        elif local_rmse > high_rmse_threshold:
             classification = "Low Accuracy"
-        elif 50 <= warning_pct < 75:
+        elif 0.5 <= warning_pct < 1.0:
             classification = "Partial Outlier"
-        elif warning_pct >= 75:
+        elif warning_pct == 1.0:
             classification = "Full Outlier"
 
         classifications.append((
             device_id,
             localmodel_id,
             classification,
-            version_number,
-            skill_score,
-            avg_rmse,
+            skill_score, 
+            local_rmse, 
             warning_pct
         ))
 
-    cursor.executemany("""
+    cur.executemany("""
         INSERT INTO device_outlier_classification 
-        (device_id, localmodel_id, outlier_classification, version_number, skill_score, rmse_value, outlier_score_value)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        (device_id, localmodel_id, outlier_classification, skill_score, rmse_value, outlier_ratio)
+        VALUES (?, ?, ?, ?, ?, ?)
     """, classifications)
 
     conn.commit()
 
-    cursor.execute("""
+    #double check the classification
+    cur.execute("""
         SELECT outlier_classification, COUNT(*) 
         FROM device_outlier_classification 
         GROUP BY outlier_classification
         ORDER BY COUNT(*) DESC
     """)
     print("\nClassification Summary:")
-    for row in cursor.fetchall():
+    for row in cur.fetchall():
         print(f"  {row[0]}: {row[1]}")
 
     conn.close()
@@ -125,31 +165,6 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
 
 
 # --- CREATING NEW TABLES IN DATABASE --- #
-
-# --- Helper functions ---#
-def get_baseline_values():
-    """Calculate baseline values (medians) from all models for normalization"""
-    conn = get_connection()
-    df = pd.read_sql("""
-        SELECT name, value FROM metric 
-        WHERE name IN ('mae', 'rmse', 'mape') AND value <> 0
-    """, conn)
-    
-    baselines = {}
-    for name in ['mae', 'rmse', 'mape']:
-        vals = df[df['name'] == name]['value']
-        baselines[name] = vals.median() if len(vals) > 0 else 1.0
-    
-    conn.close()
-    return baselines  # Returns {'mae': X, 'rmse': Y, 'mape': Z}
-
-BASELINES = None  # Will be populated on first use
-
-def get_baselines():
-    global BASELINES
-    if BASELINES is None:
-        BASELINES = get_baseline_values()
-    return BASELINES
 
 # --- Device Active Model Table --- #
 def create_active_model_lookup():
@@ -176,21 +191,27 @@ def create_active_model_lookup():
 # --- Active Model Performance Table --- #
 def create_model_performance_pivot():
     conn = get_connection()
-    baselines = get_baselines()
-    
-    df = pd.read_sql("""SELECT localmodel_id, name, value
-                     FROM metric WHERE name IN ('mae', 'rmse', 'mape') """, conn)
-    pivot = df.pivot_table(index="localmodel_id", columns="name", values="value",
-                           aggfunc = 'mean').reset_index()
-    
-    pivot.columns = ["localmodel_id", "mae", "rmse", "mape"]
-    pivot['overall_error_score'] = (
-        (pivot['mae'].fillna(0) / baselines['mae']) * 0.5 +
-        (pivot['rmse'].fillna(0) / baselines['rmse']) * 0.3 +
-        (pivot['mape'].fillna(0) / baselines['mape']) * 0.2
-    )
-    pivot.to_sql("model_performance_pivot", conn, if_exists="replace", index=False)
     cur = conn.cursor()
+    
+    cur.execute("DROP TABLE IF EXISTS model_performance_pivot")
+    
+    cur.execute("""CREATE TABLE IF NOT EXISTS model_performance_pivot AS
+                SELECT * 
+                FROM (
+                    SELECT mh.device_id, mh.localmodel_id, mh.mae, mh.rmse, mh.mape, 
+                    mh.rmse as performance_score,
+                    lm.version_number,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY mh.localmodel_id 
+                        ORDER BY mh.analytics_time DESC
+                    ) as rn
+                    FROM modelhealth mh
+                    JOIN tag t ON mh.tag_id = t.id
+                    JOIN  localmodel lm ON mh.localmodel_id = lm.id
+                WHERE t.key = 'All' )
+                WHERE rn = 1;
+                 """)
+    
     cur.execute("""CREATE INDEX IF NOT EXISTS 
                 idx_mpp_localmodel_id ON model_performance_pivot (localmodel_id);""")
     conn.commit()
@@ -201,70 +222,85 @@ def create_model_performance_pivot():
 def create_model_performance_trend():
     """Calculate performance trend based on recent vs older metrics"""
     conn = get_connection()
+    cur = conn.cursor()
     
     cur.execute("DROP TABLE IF EXISTS model_performance_trend")
     
-    df = pd.read_sql("""
-        SELECT localmodel_id,
-            update_time,
-            MAX(CASE WHEN name='mae' THEN value END) AS mae,
-            MAX(CASE WHEN name='rmse' THEN value END) AS rmse,
-            MAX(CASE WHEN name='mape' THEN value END) AS mape
-        FROM metric
-        WHERE name IN ('mae','rmse','mape')
-        GROUP BY localmodel_id, update_time
-    """, conn)
+    cur.execute("""CREATE TABLE IF NOT EXISTS model_performance_trend AS
+    WITH base AS (
+        SELECT 
+            mh.localmodel_id,
+            mh.analytics_time,
+            COALESCE(mh.mape, mh.mae) AS metric_value,
+        CASE 
+            WHEN mh.mape IS NOT NULL THEN 'MAPE'
+            ELSE 'MAE'
+        END AS metric_used
+    FROM modelhealth mh
+    WHERE mh.tag_id = (
+        SELECT id FROM tag WHERE key = 'All'
+    )
+),
+
+ranked AS (
+    SELECT *,
+        ROW_NUMBER() OVER (
+            PARTITION BY localmodel_id 
+            ORDER BY analytics_time DESC
+        ) AS rn
+    FROM base
+),
+
+comparison AS (
+    SELECT 
+        localmodel_id,
+
+        -- latest 3 avg
+        AVG(CASE WHEN rn <= 3 THEN metric_value END) AS avg_recent,
+
+        -- past avg
+        AVG(CASE WHEN rn > 3 THEN metric_value END) AS avg_past
+
+    FROM ranked
+    GROUP BY localmodel_id
+),
+
+worst AS (
+    SELECT 
+        localmodel_id,
+        analytics_time AS worst_timestamp,
+        metric_value AS worst_value,
+        metric_used
+    FROM (
+        SELECT *,
+               ROW_NUMBER() OVER (
+                   PARTITION BY localmodel_id 
+                   ORDER BY metric_value DESC
+               ) AS rn_worst
+        FROM base
+    )
+    WHERE rn_worst = 1
+)
+
+SELECT 
+    c.localmodel_id,
+
+    CASE 
+        WHEN c.avg_past IS NULL THEN 'stable'
+        WHEN c.avg_recent < c.avg_past * 0.90 THEN 'improving'
+        WHEN c.avg_recent > c.avg_past * 1.10 THEN 'degrading'
+        ELSE 'stable'
+    END AS trend,
+
+    w.worst_timestamp,
+    w.worst_value,
+    w.metric_used
+
+FROM comparison c
+JOIN worst w 
+    ON c.localmodel_id = w.localmodel_id;
+""")
     
-    results = []
-    
-    for localmodel_id, group in df.groupby('localmodel_id'):
-        group = group.sort_values('update_time')
-        
-        if len(group) < 2:
-            trend = 'stable'
-            worst_timestamp = group.iloc[-1]['update_time'] if len(group) > 0 else None
-            worst_score = None
-        else:
-            recent = group.tail(4)
-            older = group.head(len(group) - 4)
-            
-            if len(older) > 0 and len(recent) > 0:
-                recent_mae = recent['mae'].mean()
-                older_mae = older['mae'].mean()
-                
-                if pd.notna(recent_mae) and pd.notna(older_mae) and older_mae > 0:
-                    if recent_mae > older_mae * 1.1:
-                        trend = 'degrading'
-                    elif recent_mae < older_mae * 0.9:
-                        trend = 'improving'
-                    else:
-                        trend = 'stable'
-                else:
-                    trend = 'stable'
-            else:
-                trend = 'stable'
-            
-            # Calculate worst score
-            baselines = get_baselines()
-            group['error_score'] = (
-                (group['mae'].fillna(0) / baselines['mae']) * 0.5 +
-                (group['rmse'].fillna(0) / baselines['rmse']) * 0.3 +
-                (group['mape'].fillna(0) / baselines['mape']) * 0.2
-            )
-            worst_idx = group['error_score'].idxmax()
-            worst_timestamp = group.loc[worst_idx, 'update_time']
-            worst_score = group.loc[worst_idx, 'error_score']
-        
-        results.append({
-            'localmodel_id': localmodel_id,
-            'trend': trend,
-            'worst_timestamp': worst_timestamp,
-            'worst_score': worst_score
-        })
-    
-    pd.DataFrame(results).to_sql('model_performance_trend', conn, if_exists='replace', index=False)
-    
-    cur = conn.cursor()
     cur.execute("CREATE INDEX IF NOT EXISTS idx_mpt_localmodel ON model_performance_trend(localmodel_id);")
     conn.commit()
     conn.close()
@@ -276,34 +312,56 @@ def create_version_history_performance():
     
     cur = conn.cursor()
     cur.execute("DROP TABLE IF EXISTS version_history_performance")
-    
-    df = pd.read_sql("""
+    cur.execute("""CREATE TABLE IF NOT EXISTS version_history_performance AS
+    WITH ranked AS (
         SELECT 
-            lm.device_id,
-            mpp.mae,
-            mpp.mape,
-            mpp.rmse
-        FROM localmodel lm
-        JOIN model_performance_pivot mpp ON lm.id = mpp.localmodel_id
-        WHERE NOT EXISTS (
-            SELECT 1 FROM active_model_lookup aml 
-            WHERE aml.device_id = lm.device_id AND aml.localmodel_id = lm.id
-        )
-    """, conn)
+            device_id,
+            localmodel_id,
+            version_number,
+            performance_score,
+            ROW_NUMBER() OVER (
+                PARTITION BY device_id 
+                ORDER BY version_number DESC
+            ) AS rn
+        FROM model_performance_pivot),
+
+latest AS (
+    SELECT * FROM ranked
+    WHERE rn = 1
+),
+
+historical AS (
+    SELECT * FROM ranked
+    WHERE rn > 1
+),
+
+comparison AS (
+    SELECT 
+        l.device_id,
+        l.performance_score AS recent,
+        (
+            SELECT AVG(h.performance_score)
+            FROM historical h
+            WHERE h.device_id = l.device_id
+        ) AS avg_past
+    FROM latest l
+)
+
+SELECT 
+    c.device_id,
+    c.avg_past,
+
+    CASE 
+        WHEN c.avg_past IS NULL THEN 'stable'
+        WHEN c.recent < c.avg_past * 0.90 THEN 'improving'
+        WHEN c.recent > c.avg_past * 1.10 THEN 'degrading'
+        ELSE 'stable'
+    END AS trend,
     
-    results = df.groupby('device_id').agg({
-        'mae': 'mean',
-        'mape': 'mean', 
-        'rmse': 'mean'
-    }).reset_index()
-    
-    results.columns = ['device_id', 'avg_mae', 'avg_mape', 'avg_rmse']
-    
-    # Add version count
-    version_count = df.groupby('device_id').size().reset_index(name='available_versions')
-    results = results.merge(version_count, on='device_id')
-    
-    results.to_sql('version_history_performance', conn, if_exists='replace', index=False)
+    c.recent 
+
+FROM comparison c
+""")
     
     cur.execute("CREATE INDEX IF NOT EXISTS idx_vhp_device ON version_history_performance(device_id);")
     conn.commit()
@@ -407,14 +465,12 @@ def create_feature_sensitivity_historical():
 def create_device_tag_diagnostics():  
     conn = get_connection()
     cur = conn.cursor()
-    baselines = get_baselines()
-    cur.execute("DROP TABLE IF EXISTS device_tag_diagnosticsS")
+    cur.execute("DROP TABLE IF EXISTS device_tag_diagnostics")
     
     cur.execute("""CREATE TABLE IF NOT EXISTS device_tag_diagnostics AS
                 WITH ranked AS (
                 SELECT mh.device_id, mh.localmodel_id, mh.tag_id,
-                mh.analytics_time, mh.mae, mh.mape, mh.rmse,
-                mh.mae, mh.mape, mh.rmse, mh.outlier_score_value,
+                mh.analytics_time, mh.mae, mh.mape, mh.rmse, mh.outlier_score_value,
                 
                 ROW_NUMBER() OVER (
                 PARTITION BY mh.device_id, mh.tag_id
@@ -432,16 +488,15 @@ def create_device_tag_diagnostics():
                 mh.mae,
                 mh.mape,
                 mh.rmse,
+                
+                mh.rmse AS performance,
+                
                 mh.outlier_score_value,
                 
-                ((mh.mae / {}) * 0.5 + 
-                (COALESCE(mh.rmse, 0) / {}) * 0.3 + 
-                (COALESCE(mh.mape, 0) / {}) * 0.2) 
-                AS performance,
                 CASE 
-                    WHEN mh.outlier_score_value < -5 THEN 'extreme'
-                    WHEN mh.outlier_score_value < -2 THEN 'strong'
-                    WHEN mh.outlier_score_value < -1 THEN 'moderate'
+                    WHEN mh.outlier_score_value < -10 THEN 'extreme'
+                    WHEN mh.outlier_score_value < -5 THEN 'strong'
+                    WHEN mh.outlier_score_value < -2 THEN 'moderate'
                     ELSE 'no_outlier'
                 END AS outlier_score
                 
@@ -451,8 +506,8 @@ def create_device_tag_diagnostics():
                 AND mh.device_id = aml.device_id
                 LEFT JOIN tag t ON mh.tag_id = t.id
                 
-                WHERE mh.rn = 1;
-                """.format(baselines['mae'], baselines['rmse'], baselines['mape']))
+                WHERE mh.rn = 1 AND t.value IS NOT 'All';
+                """)
     cur.execute("""CREATE INDEX IF NOT EXISTS idx_dtd_device 
                 ON device_tag_diagnostics (device_id, localmodel_id);""")
     conn.commit()
@@ -475,9 +530,6 @@ def create_device_cross_tag_summary():
             tag_value,
             performance,
             outlier_score_value,
-            mae,
-            mape,
-            rmse,
             outlier_score
         FROM device_tag_diagnostics
     ),
@@ -511,7 +563,7 @@ def create_device_cross_tag_summary():
             MIN(outlier_score_value) AS worst_tag_outlier,
             AVG(outlier_score_value) AS average_tag_outlier,
 
-            SUM(CASE WHEN outlier_score IN ('extreme', 'strong') THEN 1 ELSE 0 END) AS extreme_strong_count,
+            SUM(CASE WHEN outlier_score IN ('moderate', 'extreme', 'strong') THEN 1 ELSE 0 END) AS outlier_count,
             COUNT(tag_id) AS tag_count
 
         FROM base
@@ -522,10 +574,7 @@ def create_device_cross_tag_summary():
         SELECT
             device_id,
             localmodel_id,
-            tag_value AS worst_perf_tag,
-            mae AS worst_perf_mae,
-            rmse AS worst_perf_rmse,
-            mape AS worst_perf_mape
+            tag_value AS worst_perf_tag
         FROM perf_rank
         WHERE perf_rank = 1
     ),
@@ -534,10 +583,7 @@ def create_device_cross_tag_summary():
         SELECT
             device_id,
             localmodel_id,
-            tag_value AS worst_outlier_tag,
-            mae AS worst_out_mae,
-            rmse AS worst_out_rmse,
-            mape AS worst_out_mape
+            tag_value AS worst_outlier_tag
         FROM outlier_rank
         WHERE out_rank = 1
     )
@@ -546,30 +592,20 @@ def create_device_cross_tag_summary():
         agg.device_id,
         agg.localmodel_id,
 
-        agg.worst_tag_performance,
-        agg.average_tag_performance,
-
-        agg.worst_tag_outlier,
-        agg.average_tag_outlier,
-
         worst_perf.worst_perf_tag,
-        worst_perf.worst_perf_mae,
-        worst_perf.worst_perf_rmse,
-        worst_perf.worst_perf_mape,
+        agg.worst_tag_performance,
 
-        worst_out.worst_outlier_tag,
-        worst_out.worst_out_mae,
-        worst_out.worst_out_rmse,
-        worst_out.worst_out_mape,
+        worst_out.worst_outlier_tag, 
+        agg.worst_tag_outlier,
 
-        CAST(extreme_strong_count AS FLOAT)/tag_count AS extreme_strong_ratio,
+        CAST(outlier_count AS FLOAT)/tag_count AS outlier_ratio,
 
         CASE
 
             /* DEVICE ISSUE
                bad performance across many tags
             */
-            WHEN (CAST(extreme_strong_count AS FLOAT)/tag_count) >= 0.5
+            WHEN (CAST(outlier_count AS FLOAT)/tag_count) >= 0.5
                  AND agg.average_tag_performance > 1.2
             THEN 'device_specific'
 
@@ -581,19 +617,19 @@ def create_device_cross_tag_summary():
 
             /* BAD performance but few outliers */
             WHEN agg.average_tag_performance > 1.2
-                 AND (CAST(extreme_strong_count AS FLOAT)/tag_count) < 0.2
+                 AND (CAST(outlier_count AS FLOAT)/tag_count) < 0.2
             THEN 'tag_specific'
 
 
             /* GOOD performance and few outliers */
             WHEN agg.average_tag_performance < 1.2
-                 AND (CAST(extreme_strong_count AS FLOAT)/tag_count) < 0.2
+                 AND (CAST(outlier_count AS FLOAT)/tag_count) < 0.2
             THEN 'non_specific'
 
 
             /* MANY outliers but predictions still good */
             WHEN agg.average_tag_performance < 1.2
-                 AND (CAST(extreme_strong_count AS FLOAT)/tag_count) >= 0.3
+                 AND (CAST(outlier_count AS FLOAT)/tag_count) >= 0.3
             THEN 'model_behavior_change'
 
             ELSE 'uncertain'
@@ -622,17 +658,17 @@ def create_all_optimized_tables():
     print("Creating optimized tables...")
     print("=" * 60)
     
-    create_active_model_lookup()
-    create_model_performance_pivot()
-    create_model_performance_trend()
-    create_device_tag_diagnostics()
-    create_feature_sensitivity_top3()
-    create_feature_sensitivity_historical()
-    create_device_cross_tag_summary()
-    create_version_history_performance()
+    # create_active_model_lookup()
+    # create_model_performance_pivot()
+    # create_model_performance_trend()
+    # create_device_tag_diagnostics()
+    # create_feature_sensitivity_top3()
+    # create_feature_sensitivity_historical()
+    # create_device_cross_tag_summary()
+    # create_version_history_performance()
+    create_outlier_classification_table()
     
     print("=" * 60)
     print("All tables created successfully!")
     
-#create_all_optimized_tables()
-#create_outlier_classification_table()
+create_all_optimized_tables()
