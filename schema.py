@@ -1,5 +1,4 @@
 import sqlite3
-import json
 from datetime import datetime
 
 def get_connection():
@@ -46,8 +45,15 @@ def get_device_information(conn, device_id):
                                 WHERE device_id = {device_id}) AND key <> 'All';
                     """)
         tags_dict = {r[0]: r[1] for r in cur.fetchall()}
+        
+        cur.execute(f"""SELECT outlier_classification 
+                    FROM device_outlier_classification
+                    WHERE device_id = {device_id}
+                    """)
+        classification = cur.fetchone()[0]
                 
         return {
+                "device classification": classification,
                 "tags": tags_dict
             }
     except sqlite3.Error:
@@ -62,7 +68,7 @@ def get_model_context(conn, device_id):
     try:
         cur.execute(f"""SELECT aml.version_number, aml.last_train_time, 
                     aml.is_valid, aml.is_compatible, 
-                    (SELECT MAX(create_time) FROM metric 
+                    (SELECT MAX(analytics_time) FROM modelhealth 
                     WHERE localmodel_id = aml.localmodel_id) as last_checked_time
                     FROM active_model_lookup aml
                     WHERE aml.device_id = {device_id};""")
@@ -91,11 +97,11 @@ def get_model_context(conn, device_id):
                     pass
             
             return {
-                "version": row[0],
-                "is_valid": row[2],
-                "is_compatible": row[3],
-                "model_age_days": model_age_days,
-                "training_recency_bucket": training_recency_bucket
+                #"version": row[0],
+                "no_nan_predictions": row[2],
+                "is_compatible_with_existing_localmodels": row[3],
+                #"model_age_days": model_age_days,
+                "training_recency": training_recency_bucket
             }
     except sqlite3.Error:
         print(f"Error executing model context query for Device ID {device_id}")
@@ -105,8 +111,8 @@ def get_model_context(conn, device_id):
 def get_model_performance(conn, device_id):
     cur = conn.cursor()
     try:
-        cur.execute(f"""SELECT mpp.mae, mpp.rmse, mpp.mape, mpp.overall_error_score, 
-                    mpt.trend, mpt.worst_timestamp, mpt.worst_score
+        cur.execute(f"""SELECT mpp.performance_score, mpt.trend, 
+                    mpt.worst_timestamp, mpt.worst_value, mpt.metric_used
                     FROM active_model_lookup aml
                     JOIN model_performance_pivot mpp
                     ON aml.localmodel_id = mpp.localmodel_id
@@ -118,14 +124,11 @@ def get_model_performance(conn, device_id):
         
         if row:
             return {
-                "average metrics": {
-                    "MAE": row[0],
-                    "RMSE": row[1],
-                    "MAPE": row[2]},
-                "overall_error_score": row[3],
-                "trend": row[4],
-                "worst_performance_error_score": row[6], 
-                "worst_time_stamp": row[5] 
+                "latest_error_score": row[0],
+                "trend": row[1],
+                "worst_time_stamp": row[2], 
+                "worst_value": row[3], 
+                "metric_used_for_worst_value": row[4] 
             }
     
     except sqlite3.Error as e:
@@ -136,20 +139,18 @@ def get_model_version_history(conn, device_id):
     """Get model version history information"""
     cur = conn.cursor()
     try:
-        cur.execute(f"""SELECT available_versions, avg_mae, avg_mape, avg_rmse
+        cur.execute(f"""SELECT avg_past, trend, recent
                     FROM version_history_performance
                     WHERE device_id = {device_id};""")
         
         row = cur.fetchone()
         
         return {
-           "versions_available": row[0],
-           "average_performance": { 
-               "MAE": row[1],
-               "MAPE": row[2],
-               "RMSE": row[3]
-           }
+           "trend": row[1],
+           "active_model_error_score": row[2],
+           "historical_models_error_score": row[0]
         }
+        
     except sqlite3.Error:
         print(f"Error executing model version history query for Device ID {device_id}")
         return []
@@ -212,12 +213,12 @@ def get_tag_diagnostics(conn, device_id):
         
         for r in rows: #every tag just once
             result[f"{r[0]}"] = {'performance': r[1],
-                               'outlier_score_value': r[2],
+                               #'outlier_score_value': r[2],
                                'outlier_score': r[3],
-                               'analytics_time': r[4]
+                               #'analytics_time': r[4]
                                }
         
-        result['Worst Tag'] = {rows[0][0]}
+        #result['Worst Tag'] = {rows[0][0]}
         return result
     
     except sqlite3.Error:
@@ -228,9 +229,10 @@ def get_cross_tag_context(conn, device_id):
     """Get outlier context information"""
     cur = conn.cursor()
     try:
-        cur.execute(f"""SELECT worst_tag_performance, average_tag_performance, worst_tag_outlier,
-                    average_tag_outlier, problem_pattern, 
-                    worst_perf_tag, worst_outlier_tag, extreme_strong_ratio
+        cur.execute(f"""SELECT 
+                    worst_perf_tag, worst_tag_performance, 
+                    worst_outlier_tag, worst_tag_outlier, 
+                    problem_pattern, outlier_ratio
                     FROM device_cross_tag_summary
                     WHERE device_id = {device_id};""")
         row = cur.fetchone()
@@ -239,14 +241,12 @@ def get_cross_tag_context(conn, device_id):
             return {}
         
         return {
-            "worst_performance_tag": row[5],
-            #"worst_performance": row[0],
-            #"average_performance": row[1],
-            "worst_outlier_tag": row[6],
-            #"worst_outlier_score": row[2],
-            #"average_outlier_score": row[3],
+            "worst_performance_tag": row[0],
+            #"worst_performance": row[1],
+            "worst_outlier_tag": row[2],
+            #"worst_outlier_score": row[3],
             "problem_pattern": row[4],
-            "extreme_outlier_ratio": row[7]
+            "extreme_outlier_ratio": row[5]
   }
         
     except sqlite3.Error:
