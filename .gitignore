@@ -22,4 +22,4 @@ WeatherData.sqlite
 #Ignore Pycache
 __pycache__/
 
-random_test.py
+test_environment.py
