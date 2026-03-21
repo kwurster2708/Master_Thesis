@@ -158,17 +158,17 @@ print("✅ Tags table exported to Parquet!")
 # -----------------------
 # 3. Active Model Lookup
 # -----------------------
-active_model = pd.read_sql("""
-SELECT device_id,
-       is_valid AS no_nan_predictions,
-       is_compatible AS is_compatible_with_existing_localmodels,
-       localmodel_id
-FROM active_model_lookup
-WHERE device_id IN ({device_filter})
-""", conn)
+# active_model = pd.read_sql("""
+# SELECT device_id,
+#        is_valid AS no_nan_predictions,
+#        is_compatible AS is_compatible_with_existing_localmodels,
+#        localmodel_id
+# FROM active_model_lookup
+# WHERE device_id IN ({device_filter})
+# """, conn)
 
-active_model.to_parquet(f"{output_dir}/active_model_lookup.parquet", index=False)
-print("✅ Active Model Lookup table exported to Parquet!")
+# active_model.to_parquet(f"{output_dir}/active_model_lookup.parquet", index=False)
+# print("✅ Active Model Lookup table exported to Parquet!")
 
 # -----------------------
 # 4. Model Health (filtered)

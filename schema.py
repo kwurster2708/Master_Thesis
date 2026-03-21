@@ -61,51 +61,51 @@ def get_device_information(conn, device_id):
         return {}
 
 # --- 2. Active Model Context --- #       
-def get_model_context(conn, device_id):
-    """Get model context information"""
-    cur = conn.cursor()
+# def get_model_context(conn, device_id):
+#     """Get model context information"""
+#     cur = conn.cursor()
     
-    try:
-        cur.execute(f"""SELECT aml.version_number, aml.last_train_time, 
-                    aml.is_valid, aml.is_compatible, 
-                    (SELECT MAX(analytics_time) FROM modelhealth 
-                    WHERE localmodel_id = aml.localmodel_id) as last_checked_time
-                    FROM active_model_lookup aml
-                    WHERE aml.device_id = {device_id};""")
+#     try:
+#         cur.execute(f"""SELECT aml.version_number, aml.last_train_time, 
+#                     aml.is_valid, aml.is_compatible, 
+#                     (SELECT MAX(analytics_time) FROM modelhealth 
+#                     WHERE localmodel_id = aml.localmodel_id) as last_checked_time
+#                     FROM active_model_lookup aml
+#                     WHERE aml.device_id = {device_id};""")
         
-        row = cur.fetchone()
+#         row = cur.fetchone()
         
-        if row:
-            model_age_days = None
-            training_recency_bucket = None
+#         if row:
+#             model_age_days = None
+#             training_recency_bucket = None
             
-            if row[4] and row[1]:
-                try:
-                    analytics_dt = datetime.strptime(str(row[4]), "%Y-%m-%d %H:%M:%S")
-                    train_dt = datetime.strptime(str(row[1]), "%Y-%m-%d %H:%M:%S.%f")
-                    model_age_days = (analytics_dt - train_dt).days
+#             if row[4] and row[1]:
+#                 try:
+#                     analytics_dt = datetime.strptime(str(row[4]), "%Y-%m-%d %H:%M:%S")
+#                     train_dt = datetime.strptime(str(row[1]), "%Y-%m-%d %H:%M:%S.%f")
+#                     model_age_days = (analytics_dt - train_dt).days
                     
-                    if model_age_days < 182: #half a year
-                        training_recency_bucket = "fresh"
-                    elif model_age_days < 365: #one year
-                        training_recency_bucket = "recent"
-                    elif model_age_days < 547: #1.5 years
-                        training_recency_bucket = "stale"
-                    else:
-                        training_recency_bucket = "outdated"
-                except:
-                    pass
+#                     if model_age_days < 182: #half a year
+#                         training_recency_bucket = "fresh"
+#                     elif model_age_days < 365: #one year
+#                         training_recency_bucket = "recent"
+#                     elif model_age_days < 547: #1.5 years
+#                         training_recency_bucket = "stale"
+#                     else:
+#                         training_recency_bucket = "outdated"
+#                 except:
+#                     pass
             
-            return {
-                #"version": row[0],
-                "no_nan_predictions": row[2],
-                "is_compatible_with_existing_localmodels": row[3],
-                #"model_age_days": model_age_days,
-                "training_recency": training_recency_bucket
-            }
-    except sqlite3.Error:
-        print(f"Error executing model context query for Device ID {device_id}")
-        return {}
+#             return {
+#                 #"version": row[0],
+#                 "no_nan_predictions": row[2],
+#                 "is_compatible_with_existing_localmodels": row[3],
+#                 #"model_age_days": model_age_days,
+#                 "training_recency": training_recency_bucket
+#             }
+#     except sqlite3.Error:
+#         print(f"Error executing model context query for Device ID {device_id}")
+#         return {}
    
 # --- 3.1 Active Model Performance Context --- #
 def get_model_performance(conn, device_id):
@@ -260,7 +260,7 @@ def get_full_schema(conn, device_id, include_model_performance=True,
     
     "Device Information": get_device_information(conn, device_id),
     
-    "Active Model Context": get_model_context(conn, device_id),
+    #"Active Model Context": get_model_context(conn, device_id),
     
     }
     if include_model_performance:
