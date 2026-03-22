@@ -122,7 +122,7 @@ output_dir = "parquet_output"
 os.makedirs(output_dir, exist_ok=True)
 
 device_filter = """SELECT device_id
-FROM device_classification
+FROM device_outlier_classification
 WHERE outlier_classification IN (
     'Underperforming',
     'Low Accuracy',
@@ -132,8 +132,8 @@ WHERE outlier_classification IN (
 # -----------------------
 # 1. Device Classification (Dimension)
 # -----------------------
-device_classification = pd.read_sql("""
-SELECT DISTINCT device_id, classification
+device_classification = pd.read_sql(f"""
+SELECT DISTINCT device_id, outlier_classification
 FROM device_outlier_classification
 WHERE device_id IN ({device_filter})
 ORDER BY device_id
@@ -145,7 +145,7 @@ print("✅ Classification table exported to Parquet!")
 # -----------------------
 # 2. Tags (Bridge / Dimension) #maybe add active model!
 # -----------------------
-tags = pd.read_sql("""
+tags = pd.read_sql(f"""
 SELECT DISTINCT dtl.device_id, t.key, t.value
 FROM devicetaglink dtl
 JOIN tag t ON t.id = dtl.tag_id
@@ -173,7 +173,7 @@ print("✅ Tags table exported to Parquet!")
 # -----------------------
 # 4. Model Health (filtered)
 # -----------------------
-modelhealth = pd.read_sql("""
+modelhealth = pd.read_sql(f"""
 SELECT mh.device_id,
        mh.analytics_time,
        mh.rmse AS performance_score
@@ -196,7 +196,7 @@ print("✅ Model Health table exported to Parquet!")
 # -----------------------
 # 5. Model Performance Pivot
 # -----------------------
-model_perf = pd.read_sql("""
+model_perf = pd.read_sql(f"""
 SELECT device_id, version_number, performance_score
 FROM model_performance_pivot
 WHERE device_id IN ({device_filter})
@@ -208,7 +208,7 @@ print("✅ Model Performance Pivot table exported to Parquet!")
 # -----------------------
 # 6. Feature Sensitivity Top 3
 # -----------------------
-feature_top3 = pd.read_sql("""
+feature_top3 = pd.read_sql(f"""
 SELECT aml.device_id,
        fst.top_feature_1,
        fst.importance_1,
@@ -228,7 +228,7 @@ print("✅ Feature Sensitivity Top 3 table exported to Parquet!")
 # -----------------------
 # 7. Feature Sensitivity Historical
 # -----------------------
-feature_hist = pd.read_sql("""
+feature_hist = pd.read_sql(f"""
 SELECT *
 FROM feature_sensitivity_historical
 WHERE device_id IN ({device_filter})
@@ -240,7 +240,7 @@ print("✅ Feature Sensitivity Historical table exported to Parquet!")
 # -----------------------
 # 8. Device Tag Diagnostics
 # -----------------------
-diagnostics = pd.read_sql("""
+diagnostics = pd.read_sql(f"""
 SELECT device_id, tag_value, performance, outlier_score_value, outlier_score
 FROM device_tag_diagnostics
 WHERE device_id IN ({device_filter})
@@ -252,7 +252,7 @@ print("✅ Device Tag Diagnostics table exported to Parquet!")
 # -----------------------
 # 9. Device Cross Tag Summary
 # -----------------------
-cross_tag = pd.read_sql("""
+cross_tag = pd.read_sql(f"""
 SELECT device_id, problem_pattern, outlier_ratio
 FROM device_cross_tag_summary
 WHERE device_id IN ({device_filter})
