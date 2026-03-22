@@ -23,3 +23,5 @@ WeatherData.sqlite
 __pycache__/
 
 test_environment.py
+
+parquet_output/

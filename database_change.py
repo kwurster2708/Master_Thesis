@@ -112,7 +112,7 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
         if local_rmse is None:
             continue
         
-        skill_score = (local_rmse/rmse['avg']) * 2.2
+        skill_score = (local_rmse/rmse['avg']) * 0.25
         #if local_std is not None:
             #skill_score = local_std/((local_rmse - rmse['min'])/(rmse['max'] - rmse['min'])) #this calculation is chosen by me
         # else:
@@ -123,7 +123,7 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
 
         classification = "No Outlier"
 
-        if skill_score < skill_threshold:
+        if skill_score > skill_threshold:
             classification = "Underperforming"
         elif local_rmse > high_rmse_threshold:
             classification = "Low Accuracy"
@@ -240,18 +240,18 @@ def create_model_performance_trend():
     WHERE mh.tag_id = (
         SELECT id FROM tag WHERE key = 'All'
     )
-),
+    ),
 
-ranked AS (
+    ranked AS (
     SELECT *,
         ROW_NUMBER() OVER (
             PARTITION BY localmodel_id 
             ORDER BY analytics_time DESC
         ) AS rn
     FROM base
-),
+    ),
 
-comparison AS (
+    comparison AS (
     SELECT 
         localmodel_id,
 
@@ -263,9 +263,9 @@ comparison AS (
 
     FROM ranked
     GROUP BY localmodel_id
-),
+    ),
 
-worst AS (
+    worst AS (
     SELECT 
         localmodel_id,
         analytics_time AS worst_timestamp,
@@ -280,9 +280,9 @@ worst AS (
         FROM base
     )
     WHERE rn_worst = 1
-)
+    )
 
-SELECT 
+    SELECT 
     c.localmodel_id,
 
     CASE 
@@ -296,10 +296,10 @@ SELECT
     w.worst_value,
     w.metric_used
 
-FROM comparison c
-JOIN worst w 
+    FROM comparison c
+    JOIN worst w 
     ON c.localmodel_id = w.localmodel_id;
-""")
+    """)
     
     cur.execute("CREATE INDEX IF NOT EXISTS idx_mpt_localmodel ON model_performance_trend(localmodel_id);")
     conn.commit()
@@ -325,17 +325,17 @@ def create_version_history_performance():
             ) AS rn
         FROM model_performance_pivot),
 
-latest AS (
-    SELECT * FROM ranked
-    WHERE rn = 1
-),
+    latest AS (
+        SELECT * FROM ranked
+        WHERE rn = 1
+    ),
 
-historical AS (
-    SELECT * FROM ranked
-    WHERE rn > 1
-),
+    historical AS (
+        SELECT * FROM ranked
+        WHERE rn > 1
+    ),
 
-comparison AS (
+    comparison AS (
     SELECT 
         l.device_id,
         l.performance_score AS recent,
@@ -345,9 +345,9 @@ comparison AS (
             WHERE h.device_id = l.device_id
         ) AS avg_past
     FROM latest l
-)
+    )
 
-SELECT 
+    SELECT 
     c.device_id,
     c.avg_past,
 
@@ -360,8 +360,8 @@ SELECT
     
     c.recent 
 
-FROM comparison c
-""")
+    FROM comparison c
+    """)
     
     cur.execute("CREATE INDEX IF NOT EXISTS idx_vhp_device ON version_history_performance(device_id);")
     conn.commit()
@@ -517,9 +517,10 @@ def create_device_tag_diagnostics():
 # --- Device Tag Cross Analytics Table --- #
 def create_device_cross_tag_summary():
     conn = get_connection()
+    rmse = get_rmse()
     cur = conn.cursor()
     cur.execute("DROP TABLE IF EXISTS device_cross_tag_summary")
-    cur.execute("""
+    cur.execute(f"""
         CREATE TABLE IF NOT EXISTS device_cross_tag_summary AS
 
     WITH base AS (
@@ -606,7 +607,7 @@ def create_device_cross_tag_summary():
                bad performance across many tags
             */
             WHEN (CAST(outlier_count AS FLOAT)/tag_count) >= 0.5
-                 AND agg.average_tag_performance > 1.2
+                 AND agg.average_tag_performance > {rmse['avg']} * 2
             THEN 'device_specific'
 
 
@@ -615,20 +616,20 @@ def create_device_cross_tag_summary():
             THEN 'tag_specific'
 
 
-            /* BAD performance but few outliers */
-            WHEN agg.average_tag_performance > 1.2
-                 AND (CAST(outlier_count AS FLOAT)/tag_count) < 0.2
-            THEN 'tag_specific'
+            /* BAD performance but few outliers 
+            WHEN agg.average_tag_performance > {rmse['avg']} * 2
+                AND (CAST(outlier_count AS FLOAT)/tag_count) < 0.2
+            THEN 'tag_specific'*/
 
 
             /* GOOD performance and few outliers */
-            WHEN agg.average_tag_performance < 1.2
+            WHEN agg.average_tag_performance < {rmse['avg']}
                  AND (CAST(outlier_count AS FLOAT)/tag_count) < 0.2
             THEN 'non_specific'
 
 
             /* MANY outliers but predictions still good */
-            WHEN agg.average_tag_performance < 1.2
+            WHEN agg.average_tag_performance < {rmse['avg']}
                  AND (CAST(outlier_count AS FLOAT)/tag_count) >= 0.3
             THEN 'model_behavior_change'
 
@@ -664,9 +665,9 @@ def create_all_optimized_tables():
     # create_device_tag_diagnostics()
     # create_feature_sensitivity_top3()
     # create_feature_sensitivity_historical()
-    # create_device_cross_tag_summary()
+    create_device_cross_tag_summary()
     # create_version_history_performance()
-    create_outlier_classification_table()
+    #create_outlier_classification_table()
     
     print("=" * 60)
     print("All tables created successfully!")

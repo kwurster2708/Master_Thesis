@@ -246,7 +246,7 @@ def get_cross_tag_context(conn, device_id):
             "worst_outlier_tag": row[2],
             #"worst_outlier_score": row[3],
             "problem_pattern": row[4],
-            "extreme_outlier_ratio": row[5]
+            "outlier_ratio": row[5]
   }
         
     except sqlite3.Error:
