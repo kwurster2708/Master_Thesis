@@ -53,7 +53,7 @@ def get_device_information(conn, device_id):
         classification = cur.fetchone()[0]
                 
         return {
-                "device classification": classification,
+                "weather_station_classification": classification,
                 "tags": tags_dict
             }
     except sqlite3.Error:
@@ -191,8 +191,8 @@ def get_feature_sensitivity(conn, device_id):
         hist3 = {k: v for d in hist_features for k, v in d.items()}
         
         return {
-            "top_3_features": top3,
-            "average_historical_model_contribution": hist3
+            "top_3_features_active_model": top3,
+            "top_3_features_average_historical_models": hist3
         }
     except sqlite3.Error:
         return {}
@@ -212,7 +212,7 @@ def get_tag_diagnostics(conn, device_id):
         #just put out one tag per bllablb
         
         for r in rows: #every tag just once
-            result[f"{r[0]}"] = {'performance': r[1],
+            result[f"{r[0]}"] = {'error_score': r[1],
                                #'outlier_score_value': r[2],
                                'outlier_score': r[3],
                                #'analytics_time': r[4]
@@ -258,7 +258,7 @@ def get_full_schema(conn, device_id, include_model_performance=True,
     """Generate full schema based on selected checkboxes"""
     schema = {
     
-    "Device Information": get_device_information(conn, device_id),
+    "Weather Station Information": get_device_information(conn, device_id),
     
     #"Active Model Context": get_model_context(conn, device_id),
     
@@ -268,7 +268,7 @@ def get_full_schema(conn, device_id, include_model_performance=True,
         schema["Model Version History"] = get_model_version_history(conn, device_id)
     
     if include_feature_sensitivity:
-        schema["Feature Sensitivity"] = get_feature_sensitivity(conn, device_id)
+        schema["Feature Importance"] = get_feature_sensitivity(conn, device_id)
     
     if include_model_performance:
         schema["Tag Diagnostics"] = get_tag_diagnostics(conn, device_id)

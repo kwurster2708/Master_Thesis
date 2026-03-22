@@ -28,15 +28,23 @@ def get_ollama_models():
 
 def generate_prompt(schema_data):
     """Generate prompt based on selected structure and schema data"""     
-    structure =f"""Provide an easy explanation on why the following Weather Station is classified as an outlier that an engineer working with the Weather Station can understand. 
-    It is the 22nd June 2024 and the target variable for the machine learning model is the temperature. Each Weather Station has one active model which is indicated by having the highest version number. 
-    There is also data on the previous models regarding feature sensitivity and performance. Every device has multiple tags that show the attributes of the device. 
-    For each tag on the device a exists to different timestamps that show how different it is to the devices with the same tag. 
-
-Provide an explanation based on the following Schema:
+    structure =f"""
+    Schema:
 {json.dumps(schema_data, indent=2, default=list)}
 
-Please explain why this anomaly occurred and what it means for the weather station's prediction model."""
+Based on the information provided in the schema and additional information that helps to provide a good answer, provide an easy to understand interpretation for why this weather station is an anomaly. 
+What does that mean for future predictions of the weather station? 
+
+Important information regarding the data at hand:
+* The data has entries up until July 2024 treat the data as if today is the 1st July 2024.
+* The data consists of multiple local models that are running on the weather station to predict the temperature.
+* The local model on each weather station is continuously updated using incremental learning. The data provided is always for the active local model on the weather station (except for the Model Version History and the Historical Feature Importance).
+* Every weather station has multiple tags that show the attributes of the device.  For each of these tags an outlier score exists that signalizes how different the weather station performance is compared to weather stations with the same tag.
+
+The answer has to be provided in an easy language that a user without a data background can understand. The output should have the following structure:
+1. Interpretation: Why is this device an anomaly (max. 150 words)
+2. What does this mean for future predictions of the device? (max. 100 words)
+"""
     
     return structure
 #-- The Dashboard --
@@ -70,7 +78,7 @@ if outlier != "No outliers found" and outlier != "All":
 # Schema selection checkboxes
 st.sidebar.header("Schema Selection")
 include_performance = st.sidebar.checkbox("Performance Context", value=True)
-include_feature_sensitivity = st.sidebar.checkbox("Feature Sensitivity", value=True)
+include_feature_sensitivity = st.sidebar.checkbox("Feature Importance", value=True)
 
 # Generate schema based on selection
 schema_data = None
