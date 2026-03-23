@@ -188,6 +188,7 @@ AND EXISTS (
     WHERE dtl.device_id = mh.device_id
     AND t.key = 'All'
 )
+ORDER BY mh.analytics_time ASC
 """, conn)
 
 modelhealth.to_parquet(f"{output_dir}/modelhealth.parquet", index=False)
@@ -206,36 +207,104 @@ model_perf.to_parquet(f"{output_dir}/model_performance_pivot.parquet", index=Fal
 print("✅ Model Performance Pivot table exported to Parquet!")
 
 # -----------------------
-# 6. Feature Sensitivity Top 3
+# 6. Feature Sensitivity
 # -----------------------
-feature_top3 = pd.read_sql(f"""
-SELECT aml.device_id,
-       fst.top_feature_1,
-       fst.importance_1,
-       fst.top_feature_2,
-       fst.importance_2,
-       fst.top_feature_3,
-       fst.importance_3
-FROM feature_sensitivity_top3 fst
-JOIN active_model_lookup aml
-    ON fst.modelbinary_id = aml.modelbinary_id
-WHERE aml.device_id IN ({device_filter})
-""", conn)
+sensitivity_analysis = pd.read_sql(f"""
+    WITH
+    -- Active models
+    active_models AS (
+        SELECT device_id, modelbinary_id
+        FROM active_model_lookup
+        WHERE device_id IN ({device_filter})
+    ),
 
-feature_top3.to_parquet(f"{output_dir}/feature_sensitivity_top3.parquet", index=False)
-print("✅ Feature Sensitivity Top 3 table exported to Parquet!")
+    -- All models
+    all_models AS (
+        SELECT lm.device_id, lm.modelbinary_id
+        FROM localmodel lm
+        WHERE lm.device_id IN ({device_filter})
+    ),
+
+    -- Expand JSON into rows
+    expanded_sensitivity AS (
+        SELECT 
+            mb.id AS modelbinary_id,
+            am.device_id,
+            je.key AS attribute,
+            je.value AS sensitivity
+        FROM attributesensitivities ats
+        JOIN modelbinary mb ON ats.id = mb.attribute_sensitivities_id
+        JOIN all_models am ON am.modelbinary_id = mb.id,
+            json_each(ats.attribute_sensitivities) je
+    ),
+
+    -- Active model sensitivities
+    active_sensitivity AS (
+        SELECT 
+            am.device_id,
+            es.attribute,
+            es.sensitivity AS sensitivity_active_model
+        FROM active_models am
+        JOIN expanded_sensitivity es
+            ON es.modelbinary_id = am.modelbinary_id
+    ),
+
+    -- Historical sensitivities (exclude active model)
+    historical_sensitivity AS (
+        SELECT 
+            es.device_id,
+            es.attribute,
+            AVG(es.sensitivity) AS sensitivity_historical_avg
+        FROM expanded_sensitivity es
+        LEFT JOIN active_models am
+            ON es.device_id = am.device_id
+            AND es.modelbinary_id = am.modelbinary_id
+        WHERE am.modelbinary_id IS NULL
+        GROUP BY es.device_id, es.attribute
+    )
+
+    SELECT 
+        a.device_id,
+        a.attribute,
+        a.sensitivity_active_model,
+        h.sensitivity_historical_avg
+    FROM active_sensitivity a
+    LEFT JOIN historical_sensitivity h
+        ON a.device_id = h.device_id
+        AND a.attribute = h.attribute
+    """, conn)
+
+sensitivity_analysis.to_parquet(f"{output_dir}/feature_importance.parquet", index=False)
+print("✅ Feature Importance table exported to Parquet!")
+
+# feature_top3 = pd.read_sql(f"""
+# SELECT aml.device_id,
+#        fst.top_feature_1,
+#        fst.importance_1,
+#        fst.top_feature_2,
+#        fst.importance_2,
+#        fst.top_feature_3,
+#        fst.importance_3
+# FROM feature_sensitivity_top3 fst
+# JOIN active_model_lookup aml
+#     ON fst.modelbinary_id = aml.modelbinary_id
+# WHERE aml.device_id IN ({device_filter})
+# """, conn)
+
+# feature_top3.to_parquet(f"{output_dir}/feature_sensitivity_top3.parquet", index=False)
+# print("✅ Feature Sensitivity Top 3 table exported to Parquet!")
 
 # -----------------------
 # 7. Feature Sensitivity Historical
 # -----------------------
-feature_hist = pd.read_sql(f"""
-SELECT *
-FROM feature_sensitivity_historical
-WHERE device_id IN ({device_filter})
-""", conn)
+# feature_hist = pd.read_sql(f"""
+# SELECT *
+# FROM feature_sensitivity_historical
+# WHERE device_id IN ({device_filter})
+# """, conn)
 
-feature_hist.to_parquet(f"{output_dir}/feature_sensitivity_historical.parquet", index=False)
-print("✅ Feature Sensitivity Historical table exported to Parquet!")
+# feature_hist.to_parquet(f"{output_dir}/feature_sensitivity_historical.parquet", index=False)
+# print("✅ Feature Sensitivity Historical table exported to Parquet!")
 
 # -----------------------
 # 8. Device Tag Diagnostics
