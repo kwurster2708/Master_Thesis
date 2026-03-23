@@ -18,7 +18,8 @@ def get_rmse_values():
     SELECT 
         AVG(CASE WHEN name = 'rmse' THEN value END),
         MAX(CASE WHEN name = 'rmse' THEN value END),
-        MIN(CASE WHEN name = 'rmse' THEN value END)
+        MIN(CASE WHEN name = 'rmse' THEN value END),
+        AVG(CASE WHEN name = 'cde.std' THEN value END)
     FROM metric;
     """)
     result = cur.fetchone()
@@ -26,7 +27,8 @@ def get_rmse_values():
     rmse = {
         "avg": result[0],
         "max": result[1],
-        "min": result[2]
+        "min": result[2],
+        "std": result[3]
     }
     
     conn.close()
@@ -112,7 +114,15 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
         if local_rmse is None:
             continue
         
-        skill_score = (local_rmse/rmse['avg']) * 0.25
+        local_nrmse = (local_rmse - rmse["min"])/(rmse['max'] - rmse['min'])
+        nrmse_avg = (rmse['avg'] - rmse["min"])/(rmse['max'] - rmse['min'])
+        
+        relative_score = local_nrmse/nrmse_avg
+        if local_std is not None:
+            std = 0.5 * rmse['std'] + 0.5 * local_std
+        else:
+            std = 0.5 * rmse['std'] + 0.5
+        skill_score = relative_score /(4 + std)
         #if local_std is not None:
             #skill_score = local_std/((local_rmse - rmse['min'])/(rmse['max'] - rmse['min'])) #this calculation is chosen by me
         # else:
@@ -127,7 +137,7 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
             classification = "Underperforming"
         elif local_rmse > high_rmse_threshold:
             classification = "Low Accuracy"
-        elif 0.5 <= warning_pct < 1.0:
+        elif 0.4 <= warning_pct < 1.0 :
             classification = "Partial Outlier"
         elif warning_pct == 1.0:
             classification = "Full Outlier"
@@ -255,11 +265,11 @@ def create_model_performance_trend():
     SELECT 
         localmodel_id,
 
-        -- latest 3 avg
-        AVG(CASE WHEN rn <= 3 THEN metric_value END) AS avg_recent,
+        -- latest 6 avg
+        AVG(CASE WHEN rn <= 6 THEN metric_value END) AS avg_recent,
 
         -- past avg
-        AVG(CASE WHEN rn > 3 THEN metric_value END) AS avg_past
+        AVG(CASE WHEN rn > 6 THEN metric_value END) AS avg_past
 
     FROM ranked
     GROUP BY localmodel_id
@@ -494,8 +504,8 @@ def create_device_tag_diagnostics():
                 mh.outlier_score_value,
                 
                 CASE 
-                    WHEN mh.outlier_score_value < -10 THEN 'extreme'
-                    WHEN mh.outlier_score_value < -5 THEN 'strong'
+                    WHEN mh.outlier_score_value < -5 THEN 'extreme'
+                    WHEN mh.outlier_score_value < -3.5 THEN 'strong'
                     WHEN mh.outlier_score_value < -2 THEN 'moderate'
                     ELSE 'no_outlier'
                 END AS outlier_score
@@ -506,7 +516,7 @@ def create_device_tag_diagnostics():
                 AND mh.device_id = aml.device_id
                 LEFT JOIN tag t ON mh.tag_id = t.id
                 
-                WHERE mh.rn = 1 AND t.value IS NOT 'All';
+                WHERE mh.rn = 1 AND t.key IS NOT 'All';
                 """)
     cur.execute("""CREATE INDEX IF NOT EXISTS idx_dtd_device 
                 ON device_tag_diagnostics (device_id, localmodel_id);""")
@@ -616,10 +626,10 @@ def create_device_cross_tag_summary():
             THEN 'tag_specific'
 
 
-            /* BAD performance but few outliers 
+            /* BAD performance but few outliers */
             WHEN agg.average_tag_performance > {rmse['avg']} * 2
                 AND (CAST(outlier_count AS FLOAT)/tag_count) < 0.2
-            THEN 'tag_specific'*/
+            THEN 'peer_specific'
 
 
             /* GOOD performance and few outliers */
@@ -630,7 +640,7 @@ def create_device_cross_tag_summary():
 
             /* MANY outliers but predictions still good */
             WHEN agg.average_tag_performance < {rmse['avg']}
-                 AND (CAST(outlier_count AS FLOAT)/tag_count) >= 0.3
+                 AND (CAST(outlier_count AS FLOAT)/tag_count) >= 0.4
             THEN 'model_behavior_change'
 
             ELSE 'uncertain'
@@ -665,9 +675,9 @@ def create_all_optimized_tables():
     # create_device_tag_diagnostics()
     # create_feature_sensitivity_top3()
     # create_feature_sensitivity_historical()
-    create_device_cross_tag_summary()
+    # create_device_cross_tag_summary()
     # create_version_history_performance()
-    #create_outlier_classification_table()
+    # create_outlier_classification_table()
     
     print("=" * 60)
     print("All tables created successfully!")
