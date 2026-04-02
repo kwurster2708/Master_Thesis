@@ -1,5 +1,5 @@
 #-- Importing necessary libraries --
-from schema import get_full_schema, get_all_outlier_devices, get_connection
+from schema_2 import get_full_schema, get_all_outlier_devices, get_connection
 import streamlit as st
 import sqlite3
 import ollama
@@ -42,7 +42,7 @@ Important information regarding the data at hand:
 * Every weather station has multiple tags that show the attributes of the device.  For each of these tags an outlier score exists that signalizes how different the weather station performance is compared to weather stations with the same tag.
 
 The answer has to be provided in an easy language that a user without a data background can understand. The output should have the following structure:
-1. Interpretation: Why is this device an anomaly (max. 150 words)
+1. Interpretation: Why is this weather station behaving like an anomaly? (max. 150 words)
 2. What does this mean for future predictions of the device? (max. 100 words)
 """
     
