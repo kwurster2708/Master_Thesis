@@ -12,19 +12,37 @@ def create_logging (model_used, schema, device_id):
         "anomaly_id": f"d{device_id}"}
     return log
 
-def get_ollama_models():
-    try:
-        response = ollama.list()
-        models = response.get("models", [])
+MODELS = {
+    "deepseek": {
+        "tag": "deepseek-v3.2:cloud",
+        "supports_images": False,
+        "think": True,
+    },
+    "qwen": {
+        "tag": "qwen3.5:cloud",
+        "supports_images": True,
+        "think": True,
+    },
+    "kimi": {
+        "tag": "kimi-k2.5:cloud",
+        "supports_images": True,
+        "think": True,
+    },
+}
+
+# def get_ollama_models():
+#     try:
+#         response = ollama.list()
+#         models = response.get("models", [])
         
-        if not models:
-            st.warning("No Ollama models found. Install one using: ollama pull <model_name>")
+#         if not models:
+#             st.warning("No Ollama models found. Install one using: ollama pull <model_name>")
         
-        return [model["model"] for model in models]
+#         return [model["model"] for model in models]
     
-    except Exception as e:
-        st.error(f"Ollama connection failed: {str(e)}")
-        return []
+#     except Exception as e:
+#         st.error(f"Ollama connection failed: {str(e)}")
+#         return []
 
 def generate_prompt(schema_data):
     """Generate prompt based on selected structure and schema data"""     
@@ -116,7 +134,7 @@ with right_col:
     st.subheader("LLM Configuration")
     
     # Get available Ollama models
-    ollama_models = get_ollama_models()
+    ollama_models = [MODELS[model_key]["tag"] for model_key in MODELS.keys()]
     if ollama_models:
         selected_model = st.selectbox("Select Ollama Model", options=ollama_models)
     else:
