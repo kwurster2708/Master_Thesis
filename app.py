@@ -1,9 +1,12 @@
 #-- Importing necessary libraries --
+import re
 from schema_2 import get_full_schema, get_all_outlier_devices, get_connection
 import streamlit as st
 import sqlite3
 import ollama
 import json
+from pathlib import Path
+from datetime import datetime
 
 #-- Helper Functions --
 def create_logging (model_used, schema, device_id):
@@ -11,6 +14,36 @@ def create_logging (model_used, schema, device_id):
         "included_information": list(schema.keys()),
         "anomaly_id": f"d{device_id}"}
     return log
+
+def get_configuration_name(include_performance, include_feature_sensitivity):
+    if include_performance and include_feature_sensitivity:
+        return "Combination"
+    elif include_feature_sensitivity:
+        return "FeatureImportance"
+    elif include_performance:
+        return "Performance"
+    return "Default"
+
+def sanitize_filename(name):
+    return re.sub(r'[<>:"/\\|?*]', "_", str(name))
+
+def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name):
+    base_path = Path("Experiment2")
+    
+    #sanitize model names
+    safe_model_tag = sanitize_filename(model_tag)
+    
+    folder = base_path / safe_model_tag / f"Device_{device_id}"
+    folder.mkdir(parents=True, exist_ok=True)
+    filepath = folder / f"{device_id}_{config_name}.json"
+    
+    data = {
+        "logging_info": logging_info,
+        "llm_output": llm_output}
+    
+    with open(filepath, 'w') as f:
+        json.dump(data, f, indent=2)
+    return str(filepath)
 
 MODELS = {
     "deepseek": {
@@ -98,6 +131,29 @@ st.sidebar.header("Schema Selection")
 include_performance = st.sidebar.checkbox("Performance Context", value=True)
 include_feature_sensitivity = st.sidebar.checkbox("Feature Importance", value=True)
 
+# Initialize session state for tracking changes
+if 'prev_outlier' not in st.session_state:
+    st.session_state['prev_outlier'] = selected_outlier
+if 'prev_performance' not in st.session_state:
+    st.session_state['prev_performance'] = include_performance
+if 'prev_feature' not in st.session_state:
+    st.session_state['prev_feature'] = include_feature_sensitivity
+
+# Check if device or schema changed
+device_changed = st.session_state['prev_outlier'] != selected_outlier
+schema_changed = (st.session_state['prev_performance'] != include_performance or 
+                  st.session_state['prev_feature'] != include_feature_sensitivity)
+
+# Clear LLM output if device or schema changed
+if device_changed or schema_changed:
+    st.session_state.pop('llm_output', None)
+    st.session_state.pop('logging_info', None)
+
+# Update tracking variables
+st.session_state['prev_outlier'] = selected_outlier
+st.session_state['prev_performance'] = include_performance
+st.session_state['prev_feature'] = include_feature_sensitivity
+
 # Generate schema based on selection
 schema_data = None
 if selected_outlier:
@@ -176,5 +232,17 @@ LLM Output:
 {st.session_state['llm_output']}"""
         
         st.text_area("Output", value=formatted_display, height=500, key="llm_output_display")
+        
+        # Save Output button
+        config_name = get_configuration_name(include_performance, include_feature_sensitivity)
+        if st.button("Save Output"):
+            saved_path = save_experiment_output(
+                llm_output=st.session_state['llm_output'],
+                logging_info=st.session_state['logging_info'],
+                device_id=selected_outlier,
+                model_tag=selected_model,
+                config_name=config_name
+            )
+            st.success(f"Saved to: {saved_path}")
     else:
         st.info("LLM output will appear here after clicking 'Generate LLM Output'")
