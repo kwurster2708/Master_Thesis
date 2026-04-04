@@ -208,8 +208,15 @@ with right_col:
             try:
                 response = ollama.chat(
                     model=selected_model,
-                    messages=[{"role": "user", "content": prompt_preview}]
+                    messages=[{"role": "user", "content": prompt_preview}],
+                    think=True,
+                    stream=False,
+                    #tools=[{"type": "web_search"}],
+                    options={
+                        "temperature": 0,
+                    },     
                 )
+                
                 llm_output = response['message']['content']
             
             except Exception as e:
