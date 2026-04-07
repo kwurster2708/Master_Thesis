@@ -208,8 +208,9 @@ def create_model_performance_pivot():
     cur.execute("""CREATE TABLE IF NOT EXISTS model_performance_pivot AS
                 SELECT * 
                 FROM (
-                    SELECT mh.device_id, mh.localmodel_id, mh.mae, mh.rmse, mh.mape, 
-                    mh.rmse as performance_score,
+                    SELECT mh.device_id, mh.localmodel_id,  
+                    AVG(mh.rmse) as performance_score,
+                    mh.analytics_time,
                     lm.version_number,
                     ROW_NUMBER() OVER (
                         PARTITION BY mh.localmodel_id 
@@ -218,8 +219,10 @@ def create_model_performance_pivot():
                     FROM modelhealth mh
                     JOIN tag t ON mh.tag_id = t.id
                     JOIN  localmodel lm ON mh.localmodel_id = lm.id
-                WHERE t.key = 'All' )
-                WHERE rn = 1;
+                WHERE t.key = 'All' 
+                GROUP BY mh.device_id, mh.localmodel_id, mh.analytics_time,
+                lm.version_number)
+                WHERE rn < 11;
                  """)
     
     cur.execute("""CREATE INDEX IF NOT EXISTS 
@@ -241,11 +244,7 @@ def create_model_performance_trend():
         SELECT 
             mh.localmodel_id,
             mh.analytics_time,
-            COALESCE(mh.mape, mh.mae) AS metric_value,
-        CASE 
-            WHEN mh.mape IS NOT NULL THEN 'MAPE'
-            ELSE 'MAE'
-        END AS metric_used
+            mh.rmse AS metric_value
     FROM modelhealth mh
     WHERE mh.tag_id = (
         SELECT id FROM tag WHERE key = 'All'
@@ -273,23 +272,6 @@ def create_model_performance_trend():
 
     FROM ranked
     GROUP BY localmodel_id
-    ),
-
-    worst AS (
-    SELECT 
-        localmodel_id,
-        analytics_time AS worst_timestamp,
-        metric_value AS worst_value,
-        metric_used
-    FROM (
-        SELECT *,
-               ROW_NUMBER() OVER (
-                   PARTITION BY localmodel_id 
-                   ORDER BY metric_value DESC
-               ) AS rn_worst
-        FROM base
-    )
-    WHERE rn_worst = 1
     )
 
     SELECT 
@@ -300,15 +282,9 @@ def create_model_performance_trend():
         WHEN c.avg_recent < c.avg_past * 0.90 THEN 'improving'
         WHEN c.avg_recent > c.avg_past * 1.10 THEN 'degrading'
         ELSE 'stable'
-    END AS trend,
+    END AS trend
 
-    w.worst_timestamp,
-    w.worst_value,
-    w.metric_used
-
-    FROM comparison c
-    JOIN worst w 
-    ON c.localmodel_id = w.localmodel_id;
+    FROM comparison c;
     """)
     
     cur.execute("CREATE INDEX IF NOT EXISTS idx_mpt_localmodel ON model_performance_trend(localmodel_id);")
@@ -395,14 +371,18 @@ def create_feature_sensitivity_top3():
             attrs = json.loads(row["attribute_sensitivities"])
             if isinstance(attrs, dict):
                 sorted_attrs = sorted(attrs.items(), key=lambda x: abs(x[1]) 
-                                      if x[1] else 0, reverse=True)[:3]
+                                      if x[1] else 0, reverse=True)[:5]
                 results.append({"modelbinary_id": row["id"],
                                 "top_feature_1": sorted_attrs[0][0] if len(sorted_attrs) > 0 else None,
                                 "importance_1": sorted_attrs[0][1] if len(sorted_attrs) > 0 else None,
                                 "top_feature_2": sorted_attrs[1][0] if len(sorted_attrs) > 1 else None,
                                 "importance_2": sorted_attrs[1][1] if len(sorted_attrs) > 1 else None,
                                 "top_feature_3": sorted_attrs[2][0] if len(sorted_attrs) > 2 else None,
-                                "importance_3": sorted_attrs[2][1] if len(sorted_attrs) > 2 else None})
+                                "importance_3": sorted_attrs[2][1] if len(sorted_attrs) > 2 else None,
+                                "top_feature_4": sorted_attrs[3][0] if len(sorted_attrs) > 3 else None,
+                                "importance_4": sorted_attrs[3][1] if len(sorted_attrs) > 3 else None,
+                                "top_feature_5": sorted_attrs[4][0] if len(sorted_attrs) > 4 else None,
+                                "importance_5": sorted_attrs[4][1] if len(sorted_attrs) > 4 else None})
         except: pass
     pd.DataFrame(results).to_sql("feature_sensitivity_top3", conn, if_exists="replace", index=False)
     
@@ -454,7 +434,7 @@ def create_feature_sensitivity_historical():
     results = []
     for device_id, feat_vals in all_attrs.items():
         avg_attrs = {k: np.mean(v) for k, v in feat_vals.items()}
-        sorted_attrs = sorted(avg_attrs.items(), key=lambda x: abs(x[1]) if x[1] else 0, reverse=True)[:3]
+        sorted_attrs = sorted(avg_attrs.items(), key=lambda x: abs(x[1]) if x[1] else 0, reverse=True)[:5]
         results.append({
             'device_id': device_id,
             'hist_top_1': sorted_attrs[0][0] if len(sorted_attrs) > 0 else None, 
@@ -462,7 +442,11 @@ def create_feature_sensitivity_historical():
             'hist_top_2': sorted_attrs[1][0] if len(sorted_attrs) > 1 else None, 
             'hist_sens_2': sorted_attrs[1][1] if len(sorted_attrs) > 1 else None,
             'hist_top_3': sorted_attrs[2][0] if len(sorted_attrs) > 2 else None, 
-            'hist_sens_3': sorted_attrs[2][1] if len(sorted_attrs) > 2 else None
+            'hist_sens_3': sorted_attrs[2][1] if len(sorted_attrs) > 2 else None,
+            'hist_top_4': sorted_attrs[3][0] if len(sorted_attrs) > 3 else None, 
+            'hist_sens_4': sorted_attrs[3][1] if len(sorted_attrs) > 3 else None,
+            'hist_top_5': sorted_attrs[4][0] if len(sorted_attrs) > 4 else None, 
+            'hist_sens_5': sorted_attrs[4][1] if len(sorted_attrs) > 4 else None
         })
     
     pd.DataFrame(results).to_sql('feature_sensitivity_historical', conn, if_exists='replace', index=False)

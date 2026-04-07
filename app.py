@@ -1,6 +1,6 @@
 #-- Importing necessary libraries --
 import re
-from schema_2 import get_full_schema, get_all_outlier_devices, get_connection
+from schema_3 import get_full_schema, get_all_outlier_devices, get_connection
 import streamlit as st
 import sqlite3
 import ollama
