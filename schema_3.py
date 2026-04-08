@@ -28,7 +28,22 @@ def get_all_outlier_devices(conn):
         return cur.fetchall()
     except sqlite3.Error:
         return []
-    
+
+def get_country_state(conn, device_id):
+    """Extract country and state from device tags"""
+    cur = conn.cursor()
+    try:
+        cur.execute(f"""SELECT key, value
+                    FROM tag
+                    WHERE id IN (SELECT tag_id
+                                FROM devicetaglink
+                                WHERE device_id = {device_id})""")
+        tags = {r[0]: r[1] for r in cur.fetchall()}
+        country = tags.get('country')
+        state = tags.get('state')
+        return country, state
+    except sqlite3.Error:
+        return None, None
 
 # --- FUNCTIONS TO CREATE SCHEMA ---#
 
@@ -61,7 +76,33 @@ def get_device_information(conn, device_id):
         print(f"Error executing diagnostic event query for Device ID {device_id}")
         return {}
 
-  
+def get_functioning_information(conn, device_id):
+    """Get diagnostic event information"""
+    cur = conn.cursor()
+    
+    try:
+        cur.execute(f"""SELECT key, value
+                    FROM tag
+                    WHERE id IN (SELECT tag_id
+                                FROM devicetaglink
+                                WHERE device_id = {device_id}) AND key <> 'All';
+                    """)
+        tags_dict = {r[0]: r[1] for r in cur.fetchall()}
+        
+        cur.execute(f"""SELECT outlier_classification 
+                    FROM device_outlier_classification
+                    WHERE device_id = {device_id}
+                    """)
+        classification = cur.fetchone()[0]
+                
+        return {
+                "weather_station_classification": classification,
+                "tags": tags_dict
+            }
+    except sqlite3.Error:
+        print(f"Error executing diagnostic event query for Device ID {device_id}")
+        return {}
+
 # --- 2. Model Performance Context --- #
 def get_model_performance(conn, device_id):
     cur = conn.cursor()
@@ -103,7 +144,9 @@ def get_feature_sensitivity(conn, device_id):
     try:
         cur.execute(f"""SELECT fst.top_feature_1, fst.importance_1, 
                     fst.top_feature_2, fst.importance_2,
-                    fst.top_feature_3, fst.importance_3
+                    fst.top_feature_3, fst.importance_3,
+                    fst.top_feature_4, fst.importance_4,
+                    fst.top_feature_5, fst.importance_5
                     FROM active_model_lookup aml
                     JOIN feature_sensitivity_top3 fst ON
                     aml.modelbinary_id = fst.modelbinary_id
@@ -135,13 +178,10 @@ def get_tag_diagnostics(conn, device_id):
         rows = cur.fetchall()
         result = {}
         
-        #just put out one tag per bllablb
-        
         for r in rows: #every tag just once
             result[f"{r[0]}"] = {'error_score': r[1],
                                'outlier_score': r[2]
                                }
-        
         return result
     
     except sqlite3.Error:
@@ -175,16 +215,177 @@ def get_cross_tag_context(conn, device_id):
     except sqlite3.Error:
         return {}
 
+# --- Get functioning stations (No Outliers) --- #
+def get_functioning_stations(conn, country, state):
+    cur = conn.cursor()
+    
+    # First attempt: match both country and state
+    if state != "Not Applicable":
+        cur.execute(f"""
+            SELECT DISTINCT d.id
+            FROM device d
+            JOIN devicetaglink dtl ON d.id = dtl.device_id
+            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
+            LEFT JOIN devicetaglink dtl_state ON d.id = dtl_state.device_id
+            LEFT JOIN tag t_state ON dtl_state.tag_id = t_state.id AND t_state.key = 'state' AND t_state.value = {state}
+            JOIN device_outlier_classification doc ON d.id = doc.device_id
+            WHERE doc.outlier_classification = 'No Outlier'
+            ORDER BY d.id;
+        """)
+        rows = cur.fetchall()
+        
+        # Fallback to country-only if no results
+        if not rows:
+            cur.execute(f"""
+                SELECT DISTINCT d.id
+                FROM device d
+                JOIN devicetaglink dtl ON d.id = dtl.device_id
+                JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
+                JOIN device_outlier_classification doc ON d.id = doc.device_id
+                WHERE doc.outlier_classification = 'No Outlier'
+                ORDER BY d.id;
+            """)
+            rows = cur.fetchall()
+    else:
+        # No state tag: match country only
+        cur.execute(f"""
+            SELECT DISTINCT d.id
+            FROM device d
+            JOIN devicetaglink dtl ON d.id = dtl.device_id
+            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = ?
+            JOIN device_outlier_classification doc ON d.id = doc.device_id
+            WHERE doc.outlier_classification = 'No Outlier'
+            ORDER BY d.id;
+        """, (country,))
+        rows = cur.fetchall()
+    
+    functioning_stations = []
+    for (device_id,) in rows:
+        station_schema = {
+            "weather_station_information": get_functioning_information(conn, device_id),
+            "model_performance_context": get_model_performance(conn, device_id),
+            "feature_importance": get_feature_sensitivity(conn, device_id),
+            "tag_diagnostics": get_tag_diagnostics(conn, device_id)
+        }
+        functioning_stations.append(station_schema)
+    
+    return functioning_stations
+
+def get_functioning_stations_FI(conn, country, state):
+    cur = conn.cursor()
+    
+    # First attempt: match both country and state
+    if state != "Not Applicable":
+        cur.execute(f"""
+            SELECT DISTINCT d.id
+            FROM device d
+            JOIN devicetaglink dtl ON d.id = dtl.device_id
+            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
+            LEFT JOIN devicetaglink dtl_state ON d.id = dtl_state.device_id
+            LEFT JOIN tag t_state ON dtl_state.tag_id = t_state.id AND t_state.key = 'state' AND t_state.value = {state}
+            JOIN device_outlier_classification doc ON d.id = doc.device_id
+            WHERE doc.outlier_classification = 'No Outlier'
+            ORDER BY d.id;
+        """)
+        rows = cur.fetchall()
+        
+        # Fallback to country-only if no results
+        if not rows:
+            cur.execute(f"""
+                SELECT DISTINCT d.id
+                FROM device d
+                JOIN devicetaglink dtl ON d.id = dtl.device_id
+                JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
+                JOIN device_outlier_classification doc ON d.id = doc.device_id
+                WHERE doc.outlier_classification = 'No Outlier'
+                ORDER BY d.id;
+            """)
+            rows = cur.fetchall()
+    else:
+        # No state tag: match country only
+        cur.execute(f"""
+            SELECT DISTINCT d.id
+            FROM device d
+            JOIN devicetaglink dtl ON d.id = dtl.device_id
+            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = ?
+            JOIN device_outlier_classification doc ON d.id = doc.device_id
+            WHERE doc.outlier_classification = 'No Outlier'
+            ORDER BY d.id;
+        """, (country,))
+        rows = cur.fetchall()
+    
+    functioning_stations = []
+    for (device_id,) in rows:
+        station_schema = {
+            "weather_station_information": get_functioning_information(conn, device_id),
+            "feature_importance": get_feature_sensitivity(conn, device_id)
+        }
+        functioning_stations.append(station_schema)
+    
+    return functioning_stations
+
+def get_functioning_stations_P(conn, country, state):
+    cur = conn.cursor()
+    
+    # First attempt: match both country and state
+    if state != "Not Applicable":
+        cur.execute(f"""
+            SELECT DISTINCT d.id
+            FROM device d
+            JOIN devicetaglink dtl ON d.id = dtl.device_id
+            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
+            LEFT JOIN devicetaglink dtl_state ON d.id = dtl_state.device_id
+            LEFT JOIN tag t_state ON dtl_state.tag_id = t_state.id AND t_state.key = 'state' AND t_state.value = {state}
+            JOIN device_outlier_classification doc ON d.id = doc.device_id
+            WHERE doc.outlier_classification = 'No Outlier'
+            ORDER BY d.id;
+        """)
+        rows = cur.fetchall()
+        
+        # Fallback to country-only if no results
+        if not rows:
+            cur.execute(f"""
+                SELECT DISTINCT d.id
+                FROM device d
+                JOIN devicetaglink dtl ON d.id = dtl.device_id
+                JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
+                JOIN device_outlier_classification doc ON d.id = doc.device_id
+                WHERE doc.outlier_classification = 'No Outlier'
+                ORDER BY d.id;
+            """)
+            rows = cur.fetchall()
+    else:
+        # No state tag: match country only
+        cur.execute(f"""
+            SELECT DISTINCT d.id
+            FROM device d
+            JOIN devicetaglink dtl ON d.id = dtl.device_id
+            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = ?
+            JOIN device_outlier_classification doc ON d.id = doc.device_id
+            WHERE doc.outlier_classification = 'No Outlier'
+            ORDER BY d.id;
+        """, (country,))
+        rows = cur.fetchall()
+    
+    functioning_stations = []
+    for (device_id,) in rows:
+        station_schema = {
+            "weather_station_information": get_functioning_information(conn, device_id),
+            "model_performance_context": get_model_performance(conn, device_id),
+            "tag_diagnostics": get_tag_diagnostics(conn, device_id)
+        }
+        functioning_stations.append(station_schema)
+    
+    return functioning_stations
+
 # --- SCHEMA GENERATION FUNCTION --- #
 def get_full_schema(conn, device_id, include_model_performance=True, 
                     include_feature_sensitivity=True):
     """Generate full schema based on selected checkboxes"""
+    country, state = get_country_state(conn, device_id)
+    
     schema = {
-    
-    "Weather Station Information": get_device_information(conn, device_id),
-    
-    #"Active Model Context": get_model_context(conn, device_id),
-    
+    "Weather Station Information": get_device_information(conn, device_id)
     }
     if include_model_performance:
         schema["Model Performance Context"] = get_model_performance(conn, device_id)
@@ -197,4 +398,18 @@ def get_full_schema(conn, device_id, include_model_performance=True,
         
     schema["Cross Tag Context"] = get_cross_tag_context(conn, device_id)
     
-    return schema
+    if include_feature_sensitivity and not include_model_performance:
+        functioning_schema = get_functioning_stations_FI(conn, country, state)
+        
+    if include_model_performance and not include_feature_sensitivity:
+        functioning_schema = get_functioning_stations_P(conn, country, state)
+    
+    if include_model_performance and include_feature_sensitivity:
+        functioning_schema = get_functioning_information(conn, country, state)
+    
+    full_schema = {
+        "to_be_evaluated_weather_station": schema,
+        "functioning_weather_stations": functioning_schema
+    } 
+    
+    return full_schema
