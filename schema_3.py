@@ -123,7 +123,7 @@ def get_model_performance(conn, device_id):
                     JOIN model_performance_trend mpt
                     ON aml.localmodel_id = mpt.localmodel_id
                     LEFT JOIN version_history_performance vhp
-                    ON aml.localmodel_id = vhp.localmodel_id
+                    ON aml.device_id = vhp.device_id
                     WHERE aml.device_id = {device_id};""")
         row = cur.fetchone()
         
@@ -225,13 +225,13 @@ def get_functioning_stations(conn, country, state):
             SELECT DISTINCT d.id
             FROM device d
             JOIN devicetaglink dtl ON d.id = dtl.device_id
-            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
-            LEFT JOIN devicetaglink dtl_state ON d.id = dtl_state.device_id
-            LEFT JOIN tag t_state ON dtl_state.tag_id = t_state.id AND t_state.key = 'state' AND t_state.value = {state}
+            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = ?
+            JOIN devicetaglink dtl_state ON d.id = dtl_state.device_id
+            JOIN tag t_state ON dtl_state.tag_id = t_state.id AND t_state.key = 'state' AND t_state.value = ?
             JOIN device_outlier_classification doc ON d.id = doc.device_id
             WHERE doc.outlier_classification = 'No Outlier'
             ORDER BY d.id;
-        """)
+        """, (country, state))
         rows = cur.fetchall()
         
         # Fallback to country-only if no results
@@ -240,11 +240,11 @@ def get_functioning_stations(conn, country, state):
                 SELECT DISTINCT d.id
                 FROM device d
                 JOIN devicetaglink dtl ON d.id = dtl.device_id
-                JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
+                JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = ?
                 JOIN device_outlier_classification doc ON d.id = doc.device_id
                 WHERE doc.outlier_classification = 'No Outlier'
                 ORDER BY d.id;
-            """)
+            """, (country,))
             rows = cur.fetchall()
     else:
         # No state tag: match country only
@@ -280,13 +280,13 @@ def get_functioning_stations_FI(conn, country, state):
             SELECT DISTINCT d.id
             FROM device d
             JOIN devicetaglink dtl ON d.id = dtl.device_id
-            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
-            LEFT JOIN devicetaglink dtl_state ON d.id = dtl_state.device_id
-            LEFT JOIN tag t_state ON dtl_state.tag_id = t_state.id AND t_state.key = 'state' AND t_state.value = {state}
+            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = ?
+            JOIN devicetaglink dtl_state ON d.id = dtl_state.device_id
+            JOIN tag t_state ON dtl_state.tag_id = t_state.id AND t_state.key = 'state' AND t_state.value = ?
             JOIN device_outlier_classification doc ON d.id = doc.device_id
             WHERE doc.outlier_classification = 'No Outlier'
             ORDER BY d.id;
-        """)
+        """, (country, state))
         rows = cur.fetchall()
         
         # Fallback to country-only if no results
@@ -295,11 +295,11 @@ def get_functioning_stations_FI(conn, country, state):
                 SELECT DISTINCT d.id
                 FROM device d
                 JOIN devicetaglink dtl ON d.id = dtl.device_id
-                JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
+                JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = ?
                 JOIN device_outlier_classification doc ON d.id = doc.device_id
                 WHERE doc.outlier_classification = 'No Outlier'
                 ORDER BY d.id;
-            """)
+            """, (country,))
             rows = cur.fetchall()
     else:
         # No state tag: match country only
@@ -333,13 +333,13 @@ def get_functioning_stations_P(conn, country, state):
             SELECT DISTINCT d.id
             FROM device d
             JOIN devicetaglink dtl ON d.id = dtl.device_id
-            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
-            LEFT JOIN devicetaglink dtl_state ON d.id = dtl_state.device_id
-            LEFT JOIN tag t_state ON dtl_state.tag_id = t_state.id AND t_state.key = 'state' AND t_state.value = {state}
+            JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = ?
+            JOIN devicetaglink dtl_state ON d.id = dtl_state.device_id
+            JOIN tag t_state ON dtl_state.tag_id = t_state.id AND t_state.key = 'state' AND t_state.value = ?
             JOIN device_outlier_classification doc ON d.id = doc.device_id
             WHERE doc.outlier_classification = 'No Outlier'
             ORDER BY d.id;
-        """)
+        """, (country, state))
         rows = cur.fetchall()
         
         # Fallback to country-only if no results
@@ -348,11 +348,11 @@ def get_functioning_stations_P(conn, country, state):
                 SELECT DISTINCT d.id
                 FROM device d
                 JOIN devicetaglink dtl ON d.id = dtl.device_id
-                JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = {country}
+                JOIN tag t_country ON dtl.tag_id = t_country.id AND t_country.key = 'country' AND t_country.value = ?
                 JOIN device_outlier_classification doc ON d.id = doc.device_id
                 WHERE doc.outlier_classification = 'No Outlier'
                 ORDER BY d.id;
-            """)
+            """, (country,))
             rows = cur.fetchall()
     else:
         # No state tag: match country only
@@ -405,7 +405,7 @@ def get_full_schema(conn, device_id, include_model_performance=True,
         functioning_schema = get_functioning_stations_P(conn, country, state)
     
     if include_model_performance and include_feature_sensitivity:
-        functioning_schema = get_functioning_information(conn, country, state)
+        functioning_schema = get_functioning_stations(conn, country, state)
     
     full_schema = {
         "to_be_evaluated_weather_station": schema,

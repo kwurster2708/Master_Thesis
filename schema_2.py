@@ -64,24 +64,28 @@ def get_device_information(conn, device_id):
 def get_model_performance(conn, device_id):
     cur = conn.cursor()
     try:
-        cur.execute(f"""SELECT mpp.performance_score, mpt.trend, 
-                    mpt.worst_timestamp, mpt.worst_value, mpt.metric_used
+        cur.execute(f"""SELECT mpp.performance_score, mpp.analytics_time
                     FROM active_model_lookup aml
                     JOIN model_performance_pivot mpp
                     ON aml.localmodel_id = mpp.localmodel_id
-                    LEFT JOIN model_performance_trend mpt
+                    WHERE aml.device_id = {device_id};""")
+        rows = cur.fetchall()
+        performance_dict = {
+            f"{analytics_time}": performance_score
+            for performance_score, analytics_time in rows
+        }
+        
+        cur.execute(f"""SELECT mpt.trend
+                    FROM active_model_lookup aml
+                    JOIN model_performance_trend mpt
                     ON aml.localmodel_id = mpt.localmodel_id
                     WHERE aml.device_id = {device_id};""")
-        
         row = cur.fetchone()
         
         if row:
             return {
-                "latest_error_score": row[0],
-                "trend": row[1],
-                "worst_time_stamp": row[2], 
-                "worst_value": row[3], 
-                "metric_used_for_worst_value": row[4] 
+                "model_performance_trend": row[0],
+                "performance": performance_dict
             }
     
     except sqlite3.Error as e:

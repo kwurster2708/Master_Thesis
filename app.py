@@ -11,7 +11,7 @@ from datetime import datetime
 #-- Helper Functions --
 def create_logging (model_used, schema, device_id):
     log ={"model_used": model_used,
-        "included_information": list(schema.keys()),
+        "included_information": list(schema["to_be_evaluated_weather_station"].keys()),
         "anomaly_id": f"d{device_id}"}
     return log
 
@@ -77,13 +77,13 @@ MODELS = {
 #         st.error(f"Ollama connection failed: {str(e)}")
 #         return []
 
-def generate_prompt(schema_data):
+def generate_prompt(schema_data, device_id):
     """Generate prompt based on selected structure and schema data"""     
     structure =f"""
     Schema:
 {json.dumps(schema_data, indent=2, default=list)}
 
-Based on the information provided in the schema and additional information that helps to provide a good answer, provide an easy to understand interpretation for why this weather station is an anomaly. 
+Based on the information provided in the schema and additional information that helps to provide a good answer, provide an easy to understand interpretation for why the weather station {device_id} is an anomaly. 
 What does that mean for future predictions of the weather station? 
 
 Important information regarding the data at hand:
@@ -91,10 +91,20 @@ Important information regarding the data at hand:
 * The data consists of multiple local models that are running on the weather station to predict the temperature.
 * The local model on each weather station is continuously updated using incremental learning. The data provided is always for the active local model on the weather station (except for the Model Version History and the Historical Feature Importance).
 * Every weather station has multiple tags that show the attributes of the device.  For each of these tags an outlier score exists that signalizes how different the weather station performance is compared to weather stations with the same tag.
+* The schema represents multiple different weather stations in the same state or country.
 
-The answer has to be provided in an easy language that a user without a data background can understand. The output should have the following structure:
-1. Interpretation: Why is this weather station behaving like an anomaly? (max. 150 words)
-2. What does this mean for future predictions of the device? (max. 100 words)
+Chain of thought instructions:
+1. Briefly analyze what the explanation is saying.
+2. Check whether it correctly answers why the anomaly occurred.
+3. Assess whether it uses feature importance and performance information correctly.
+4. Evaluate clarity, completeness, and usefulness for a non-expert user.
+5. Based on your reasoning, assign scores.
+Think step-by-step internally before answering, but do NOT include your reasoning in the final output.
+
+The answer has to be provided in an easy language that a user without a data background can understand. Make sure to provide short and concise answers that answer the questions at hand without unnecessary information. The output should have the following structure:
+1. Interpretation: Why is the weather station {device_id} behaving like an anomaly?
+2. What does this mean for future predictions of the weather station {device_id}?
+3. Provide a short statement of reasoning to justify your answer, but keep it concise and non-technical.
 """
     
     return structure
@@ -171,7 +181,7 @@ left_col, right_col = st.columns([2,2])
 with left_col:
     st.subheader("Prompt Preview")
     if schema_data:
-        prompt_preview = generate_prompt(schema_data)
+        prompt_preview = generate_prompt(schema_data, selected_outlier)
         
         # Force update of session state
         st.session_state["prompt_preview"] = prompt_preview
@@ -199,7 +209,7 @@ with right_col:
     # Button to run LLM
     if st.button("Generate LLM Output"):
         if schema_data:
-            prompt_preview = generate_prompt(schema_data)
+            prompt_preview = generate_prompt(schema_data, selected_outlier)
             
             #-- Logging Information --
             logs =create_logging(selected_model, schema_data, selected_outlier)
