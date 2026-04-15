@@ -1,6 +1,6 @@
 #-- Importing necessary libraries --
 import re
-from schema_3 import get_full_schema, get_all_outlier_devices, get_connection
+from schema_2 import get_full_schema, get_all_outlier_devices, get_connection
 import streamlit as st
 import sqlite3
 import ollama
@@ -33,9 +33,9 @@ def save_experiment_output(llm_output, logging_info, device_id, model_tag, confi
     #sanitize model names
     safe_model_tag = sanitize_filename(model_tag)
     
-    folder = base_path / safe_model_tag / f"Device_{device_id}"
+    folder = base_path / f"Device_{device_id}" / config_name
     folder.mkdir(parents=True, exist_ok=True)
-    filepath = folder / f"{device_id}_{config_name}.json"
+    filepath = folder / f"{device_id}_{config_name}_{safe_model_tag}.json"
     
     data = {
         "logging_info": logging_info,

@@ -666,4 +666,4 @@ def create_all_optimized_tables():
     print("=" * 60)
     print("All tables created successfully!")
     
-create_all_optimized_tables()
+#create_all_optimized_tables()
