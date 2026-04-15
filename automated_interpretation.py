@@ -71,7 +71,7 @@ def create_logging(model_used, schema, device_id):
 #     }
 #     return log
 
-def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment2"):
+def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment3"):
     base_path = Path(base_dir)
 
     safe_model_tag = sanitize_filename(model_tag)
@@ -147,7 +147,7 @@ def run_llm(model_tag, prompt, think=True, temperature=0):
     return response["message"]["content"]
 
 
-def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment2"):
+def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment3"):
     model_cfg = MODELS[model_key]
     model_tag = model_cfg["tag"]
     config_name = config["name"]
@@ -193,7 +193,7 @@ def generate_for_device(conn, device_id, model_key, config, output_dir="Experime
     }
 
 
-def run_batch(device_ids, selected_models=None, output_dir="Experiment2"):
+def run_batch(device_ids, selected_models=None, output_dir="Experiment3"):
     conn = get_connection()
     results = []
 
@@ -243,7 +243,7 @@ def parse_args():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="Experiment2",
+        default="Experiment3",
         help="Base output directory for JSON files.",
     )
     return parser.parse_args()
