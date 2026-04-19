@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 
 import ollama
-from schema_3 import get_full_schema, get_connection
+from schema_4 import get_full_schema, get_connection
 
 
 # -----------------------------
@@ -55,11 +55,21 @@ def sanitize_filename(name):
     return re.sub(r'[<>:"/\\|?*]', "_", str(name))
 
 
-def create_logging(model_used, schema, device_id):
+def create_logging(model_used, schema, device_id, config_name):
     
+    if config_name == "Performance":
+        configuration = "Model Performance"
+    elif config_name == "FeatureImportance":
+        configuration = "Feature Importance"
+    elif config_name == "Combination":
+        configuration = "Model Performance and Feature Importance"
+    else:
+        configuration = {}
+
     log = {
         "model_used": model_used,
         "included_information": list(schema["to_be_evaluated_weather_station"].keys()),
+        "additional_included_information": configuration,
         "anomaly_id": f"d{device_id}",
     }
     return log
@@ -72,7 +82,7 @@ def create_logging(model_used, schema, device_id):
 #     }
 #     return log
 
-def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment3"):
+def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment4"):
     base_path = Path(base_dir)
 
     safe_model_tag = sanitize_filename(model_tag)
@@ -150,7 +160,7 @@ def run_llm(model_tag, prompt, think=True, temperature=0):
     return response["message"]["content"]
 
 
-def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment3"):
+def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment4"):
     model_cfg = MODELS[model_key]
     model_tag = model_cfg["tag"]
     config_name = config["name"]
@@ -163,7 +173,7 @@ def generate_for_device(conn, device_id, model_key, config, output_dir="Experime
     )
 
     prompt = generate_prompt(schema_data, device_id)
-    logging_info = create_logging(model_tag, schema_data, device_id)
+    logging_info = create_logging(model_tag, schema_data, device_id, config_name)
 
     try:
         llm_output = run_llm(
@@ -196,7 +206,7 @@ def generate_for_device(conn, device_id, model_key, config, output_dir="Experime
     }
 
 
-def run_batch(device_ids, selected_models=None, output_dir="Experiment3"):
+def run_batch(device_ids, selected_models=None, output_dir="Experiment4"):
     conn = get_connection()
     results = []
 
@@ -206,6 +216,10 @@ def run_batch(device_ids, selected_models=None, output_dir="Experiment3"):
         for model_key in model_keys:
             if model_key not in MODELS:
                 print(f"Skipping unknown model key: {model_key}")
+                continue
+            
+            if MODELS[model_key]["supports_images"] == False:
+                print(f"Skipping model {model_key} as it does not support images.")
                 continue
 
             for config in CONFIGURATIONS:
@@ -246,7 +260,7 @@ def parse_args():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="Experiment3",
+        default="Experiment4",
         help="Base output directory for JSON files.",
     )
     return parser.parse_args()

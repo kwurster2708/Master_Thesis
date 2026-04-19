@@ -4,138 +4,101 @@ import os
 
 conn = sqlite3.connect(r"\Users\Kim_W\Ekkono_Code\WeatherData.sqlite")
 
-# query = """
-# WITH tag_filtered AS (
-#     SELECT dtl.device_id, t.key, t.value
-#     FROM devicetaglink dtl
-#     JOIN tag t ON t.tag_id = dtl.tag_id
-# ),
-
-# modelhealth_filtered AS (
-#     SELECT mh.device_id,
-#            mh.analytics_time,
-#            mh.rmse AS performance_score
-#     FROM modelhealth mh
-#     JOIN active_model_lookup aml 
-#         ON mh.localmodel_id = aml.localmodel_id
-#     JOIN devicetaglink dtl 
-#         ON mh.device_id = dtl.device_id
-#     JOIN tag t 
-#         ON t.tag_id = dtl.tag_id
-#     WHERE t.key = 'All'
-# ),
-
-# feature_sensitivity_filtered AS (
-#     SELECT fst.device_id,
-#            fst.top_feature_1,
-#            fst.importance_1,
-#            fst.top_feature_2,
-#            fst.importance_2,
-#            fst.top_feature_3,
-#            fst.importance_3
-#     FROM feature_sensitivity_top3 fst
-#     JOIN active_model_lookup aml
-#         ON fst.modelbinary_id = aml.modelbinary_id
-# )
-
-# SELECT 
-#     dc.device_id,
-#     dc.classification,
-
-#     -- Tag info
-#     tf.key,
-#     tf.value,
-
-#     -- Active model lookup
-#     aml.is_valid AS no_nan_predictions,
-#     aml.is_compatible AS is_compatible_with_existing_localmodels,
-
-#     -- Model health
-#     mh.analytics_time,
-#     mh.performance_score,
-
-#     -- Model performance
-#     mpp.version_number,
-#     mpp.performance_score AS model_performance_score,
-
-#     -- Feature sensitivity (top 3)
-#     fs.top_feature_1,
-#     fs.importance_1,
-#     fs.top_feature_2,
-#     fs.importance_2,
-#     fs.top_feature_3,
-#     fs.importance_3,
-
-#     -- Feature sensitivity historical
-#     fsh.hist_top_1,
-#     fsh.hist_sens_1,
-#     fsh.hist_top_2,
-#     fsh.hist_sens_2,
-#     fsh.hist_top_3,
-#     fsh.hist_sens_3,
-
-#     -- Diagnostics
-#     dtd.tag_value,
-#     dtd.performance,
-#     dtd.outlier_score_value,
-#     dtd.outlier_score,
-
-#     -- Cross tag summary
-#     dcts.problem_pattern,
-#     dcts.outlier_ratio
-
-# FROM device_classification dc
-
-# LEFT JOIN tag_filtered tf 
-#     ON dc.device_id = tf.device_id
-
-# LEFT JOIN active_model_lookup aml 
-#     ON dc.device_id = aml.device_id
-
-# LEFT JOIN modelhealth_filtered mh 
-#     ON dc.device_id = mh.device_id
-
-# LEFT JOIN model_performance_pivot mpp 
-#     ON dc.device_id = mpp.device_id
-
-# LEFT JOIN feature_sensitivity_filtered fs 
-#     ON dc.device_id = fs.device_id
-
-# LEFT JOIN feature_sensitivity_historical fsh 
-#     ON dc.device_id = fsh.device_id
-
-# LEFT JOIN device_tag_diagnostics dtd 
-#     ON dc.device_id = dtd.device_id
-
-# LEFT JOIN device_cross_tag_summary dcts 
-#     ON dc.device_id = dcts.device_id
-# """
-
-# # Read into pandas
-# df = pd.read_sql(query, conn)
-
-# df.to_parquet("Database.parquet", index = False)
-
-
 # Path setup
 output_dir = "parquet_output"
 os.makedirs(output_dir, exist_ok=True)
 
-device_filter = """SELECT device_id
-FROM device_outlier_classification
-WHERE outlier_classification IN (
-    'Underperforming',
-    'Low Accuracy',
-    'Partial Outlier',
-    'Full Outlier')"""
+def to_sql_in(values):
+    return ",".join(str(v) for v in values)
+
+def get_related_models(conn, device_ids):
+    cur = conn.cursor()
+    result = {}
+    device_list = set()
+
+    for device_id in device_ids:
+        device_list.add(device_id)
+        
+        try:
+            # Get country and state for the active device
+            cur.execute("""
+                SELECT t.key, t.value
+                FROM tag t
+                JOIN devicetaglink dtl ON t.id = dtl.tag_id
+                WHERE dtl.device_id = ?
+                  AND t.key IN ('country', 'state')
+            """, (device_id,))
+            tags = dict(cur.fetchall())
+
+            country = tags.get("country")
+            state = tags.get("state")
+
+            if not country:
+                result[device_id] = []
+                continue
+
+            # Try country + state first if state is available
+            rows = []
+            if state and state != "Not Applicable":
+                cur.execute("""
+                    SELECT DISTINCT d.id
+                    FROM device d
+                    JOIN devicetaglink dtl_country ON d.id = dtl_country.device_id
+                    JOIN tag t_country
+                        ON dtl_country.tag_id = t_country.id
+                    JOIN devicetaglink dtl_state ON d.id = dtl_state.device_id
+                    JOIN tag t_state
+                        ON dtl_state.tag_id = t_state.id
+                    JOIN device_outlier_classification doc
+                        ON d.id = doc.device_id
+                    WHERE t_country.key = 'country'
+                      AND t_country.value = ?
+                      AND t_state.key = 'state'
+                      AND t_state.value = ?
+                      AND doc.outlier_classification = 'No Outlier'
+                    ORDER BY d.id
+                """, (country, state))
+                rows = cur.fetchall()
+
+            # Fallback to country only
+            if not rows:
+                cur.execute("""
+                    SELECT DISTINCT d.id
+                    FROM device d
+                    JOIN devicetaglink dtl_country ON d.id = dtl_country.device_id
+                    JOIN tag t_country
+                        ON dtl_country.tag_id = t_country.id
+                    JOIN device_outlier_classification doc
+                        ON d.id = doc.device_id
+                    WHERE t_country.key = 'country'
+                      AND t_country.value = ?
+                      AND doc.outlier_classification = 'No Outlier'
+                    ORDER BY d.id
+                """, (country,))
+                rows = cur.fetchall()
+
+            result[device_id] = [row[0] for row in rows if row[0] != device_id]
+            device_list.update([row[0] for row in rows if row[0] != device_id])
+
+        except sqlite3.Error:
+            result[device_id] = []
+
+    device_list = sorted(list(device_list))
+    return result, device_list
+
+devices = [88, 131, 1383, 1456]
+device_dict, device_list = get_related_models(conn, devices)
+
+device_list_sql = to_sql_in(device_list)
+devices_sql = to_sql_in(devices)
 
 # -----------------------
-# 1. Device Classification (Dimension)
+# 1. Device Classification
 # -----------------------
 device_classification = pd.read_sql(f"""
 SELECT DISTINCT device_id, outlier_classification
 FROM device_outlier_classification
-WHERE device_id IN ({device_filter})
+WHERE device_id IN ({devices_sql})
 ORDER BY device_id
 """, conn)
 
@@ -143,35 +106,20 @@ device_classification.to_parquet(f"{output_dir}/device_classification.parquet", 
 print("✅ Classification table exported to Parquet!")
 
 # -----------------------
-# 2. Tags (Bridge / Dimension) #maybe add active model!
+# 2. Tags 
 # -----------------------
 tags = pd.read_sql(f"""
 SELECT DISTINCT dtl.device_id, t.key, t.value
 FROM devicetaglink dtl
 JOIN tag t ON t.id = dtl.tag_id
-WHERE t.key <> 'All' AND dtl.device_id IN ({device_filter})
+WHERE t.key <> 'All' AND dtl.device_id IN ({device_list_sql})
 """, conn)
 
 tags.to_parquet(f"{output_dir}/tags.parquet", index=False)
 print("✅ Tags table exported to Parquet!")
 
 # -----------------------
-# 3. Active Model Lookup
-# -----------------------
-# active_model = pd.read_sql("""
-# SELECT device_id,
-#        is_valid AS no_nan_predictions,
-#        is_compatible AS is_compatible_with_existing_localmodels,
-#        localmodel_id
-# FROM active_model_lookup
-# WHERE device_id IN ({device_filter})
-# """, conn)
-
-# active_model.to_parquet(f"{output_dir}/active_model_lookup.parquet", index=False)
-# print("✅ Active Model Lookup table exported to Parquet!")
-
-# -----------------------
-# 4. Model Health (filtered)
+# 3. Model Health
 # -----------------------
 modelhealth = pd.read_sql(f"""
 SELECT mh.device_id,
@@ -180,7 +128,7 @@ SELECT mh.device_id,
 FROM modelhealth mh
 JOIN active_model_lookup aml 
     ON mh.localmodel_id = aml.localmodel_id
-WHERE mh.device_id IN ({device_filter})
+WHERE mh.device_id IN ({device_list_sql})
 AND EXISTS (
     SELECT 1
     FROM devicetaglink dtl
@@ -195,12 +143,48 @@ modelhealth.to_parquet(f"{output_dir}/modelhealth.parquet", index=False)
 print("✅ Model Health table exported to Parquet!")
 
 # -----------------------
+# 4. Performance Trend Comparison
+# -----------------------
+performance_frames = []
+
+for inspected_device, related_devices in device_dict.items():
+    comparison_devices = sorted(set([inspected_device] + related_devices))
+    comparison_sql = to_sql_in(comparison_devices)
+
+    performance = pd.read_sql(f"""
+    SELECT
+        {inspected_device} AS inspected_device_id,
+        mh.device_id AS comparison_device_id,
+        CASE
+            WHEN mh.device_id = {inspected_device} THEN 1
+            ELSE 0
+        END AS is_inspected_device,
+        mh.analytics_time,
+        mh.rmse AS performance_score
+    FROM modelhealth mh
+    JOIN active_model_lookup aml
+        ON mh.localmodel_id = aml.localmodel_id
+    WHERE mh.device_id IN ({comparison_sql})
+    ORDER BY mh.analytics_time ASC, mh.device_id ASC
+    """, conn)
+
+    performance_frames.append(performance)
+
+performance_trend_comparison = pd.concat(performance_frames, ignore_index=True)
+
+performance_trend_comparison.to_parquet(
+    f"{output_dir}/performance_trend_comparison.parquet",
+    index=False
+)
+print("✅ Performance trend comparison exported to Parquet!")
+
+# -----------------------
 # 5. Model Performance Pivot
 # -----------------------
 model_perf = pd.read_sql(f"""
 SELECT device_id, version_number, performance_score
 FROM model_performance_pivot
-WHERE device_id IN ({device_filter})
+WHERE device_id IN ({devices_sql})
 """, conn)
 
 model_perf.to_parquet(f"{output_dir}/model_performance_pivot.parquet", index=False)
@@ -209,102 +193,67 @@ print("✅ Model Performance Pivot table exported to Parquet!")
 # -----------------------
 # 6. Feature Sensitivity
 # -----------------------
-sensitivity_analysis = pd.read_sql(f"""
-    WITH
-    -- Active models
-    active_models AS (
+feature_frames = []
+
+for inspected_device, related_devices in device_dict.items():
+    if not related_devices:
+        continue
+    
+    related_sql = to_sql_in(related_devices)
+
+    sensitivity_analysis = pd.read_sql(f"""
+    WITH active_models AS (
         SELECT device_id, modelbinary_id
         FROM active_model_lookup
-        WHERE device_id IN ({device_filter})
+        WHERE device_id IN ({inspected_device}, {related_sql})
     ),
 
-    -- All models
-    all_models AS (
-        SELECT lm.device_id, lm.modelbinary_id
-        FROM localmodel lm
-        WHERE lm.device_id IN ({device_filter})
-    ),
-
-    -- Expand JSON into rows
     expanded_sensitivity AS (
-        SELECT 
-            mb.id AS modelbinary_id,
+        SELECT
             am.device_id,
             je.key AS attribute,
             je.value AS sensitivity
         FROM attributesensitivities ats
         JOIN modelbinary mb ON ats.id = mb.attribute_sensitivities_id
-        JOIN all_models am ON am.modelbinary_id = mb.id,
-            json_each(ats.attribute_sensitivities) je
+        JOIN active_models am ON am.modelbinary_id = mb.id
+        JOIN json_each(ats.attribute_sensitivities) je
     ),
 
-    -- Active model sensitivities
     active_sensitivity AS (
         SELECT 
-            am.device_id,
-            es.attribute,
-            es.sensitivity AS sensitivity_active_model
-        FROM active_models am
-        JOIN expanded_sensitivity es
-            ON es.modelbinary_id = am.modelbinary_id
+            device_id,
+            attribute,
+            sensitivity
+        FROM expanded_sensitivity es
+        WHERE device_id = {inspected_device}
     ),
 
-    -- Historical sensitivities (exclude active model)
-    historical_sensitivity AS (
-        SELECT 
-            es.device_id,
-            es.attribute,
-            AVG(es.sensitivity) AS sensitivity_historical_avg
-        FROM expanded_sensitivity es
-        LEFT JOIN active_models am
-            ON es.device_id = am.device_id
-            AND es.modelbinary_id = am.modelbinary_id
-        WHERE am.modelbinary_id IS NULL
-        GROUP BY es.device_id, es.attribute
+    related_sensitivity AS (
+        SELECT
+            attribute,
+            AVG(sensitivity) AS avg_related_sensitivity
+        FROM expanded_sensitivity
+        WHERE device_id IN ({related_sql})
+        GROUP BY attribute
     )
 
-    SELECT 
-        a.device_id,
+    SELECT
+        {inspected_device} AS inspected_device_id,
         a.attribute,
-        a.sensitivity_active_model,
-        h.sensitivity_historical_avg
+        a.sensitivity AS inspected_device_sensitivity,
+        r.avg_related_sensitivity
     FROM active_sensitivity a
-    LEFT JOIN historical_sensitivity h
-        ON a.device_id = h.device_id
-        AND a.attribute = h.attribute
+    LEFT JOIN related_sensitivity r
+        ON a.attribute = r.attribute
+    ORDER BY a.attribute
     """, conn)
 
-sensitivity_analysis.to_parquet(f"{output_dir}/feature_importance.parquet", index=False)
+    feature_frames.append(sensitivity_analysis)
+
+feature_importance_comparison = pd.concat(feature_frames, ignore_index=True)
+
+feature_importance_comparison.to_parquet(f"{output_dir}/feature_importance.parquet", index=False)
 print("✅ Feature Importance table exported to Parquet!")
-
-# feature_top3 = pd.read_sql(f"""
-# SELECT aml.device_id,
-#        fst.top_feature_1,
-#        fst.importance_1,
-#        fst.top_feature_2,
-#        fst.importance_2,
-#        fst.top_feature_3,
-#        fst.importance_3
-# FROM feature_sensitivity_top3 fst
-# JOIN active_model_lookup aml
-#     ON fst.modelbinary_id = aml.modelbinary_id
-# WHERE aml.device_id IN ({device_filter})
-# """, conn)
-
-# feature_top3.to_parquet(f"{output_dir}/feature_sensitivity_top3.parquet", index=False)
-# print("✅ Feature Sensitivity Top 3 table exported to Parquet!")
-
-# -----------------------
-# 7. Feature Sensitivity Historical
-# -----------------------
-# feature_hist = pd.read_sql(f"""
-# SELECT *
-# FROM feature_sensitivity_historical
-# WHERE device_id IN ({device_filter})
-# """, conn)
-
-# feature_hist.to_parquet(f"{output_dir}/feature_sensitivity_historical.parquet", index=False)
-# print("✅ Feature Sensitivity Historical table exported to Parquet!")
 
 # -----------------------
 # 8. Device Tag Diagnostics
@@ -312,7 +261,7 @@ print("✅ Feature Importance table exported to Parquet!")
 diagnostics = pd.read_sql(f"""
 SELECT device_id, tag_value, performance, outlier_score_value, outlier_score
 FROM device_tag_diagnostics
-WHERE device_id IN ({device_filter})
+WHERE device_id IN ({devices_sql})
 """, conn)
 
 diagnostics.to_parquet(f"{output_dir}/device_tag_diagnostics.parquet", index=False)
@@ -324,7 +273,7 @@ print("✅ Device Tag Diagnostics table exported to Parquet!")
 cross_tag = pd.read_sql(f"""
 SELECT device_id, problem_pattern, outlier_ratio
 FROM device_cross_tag_summary
-WHERE device_id IN ({device_filter})
+WHERE device_id IN ({devices_sql})
 """, conn)
 
 cross_tag.to_parquet(f"{output_dir}/device_cross_tag_summary.parquet", index=False)

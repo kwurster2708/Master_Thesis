@@ -59,9 +59,9 @@ def get_feature_importance_pictures(device_id):
 def get_pictures(device_id, include_performance=True, include_feature_importance=True):
     pictures = {}
     if include_performance:
-        pictures["performance"] = get_performance_pictures(device_id)
+        pictures["performance"] = str(get_performance_pictures(device_id))
     if include_feature_importance:
-        pictures["feature_importance"] = get_feature_importance_pictures(device_id)
+        pictures["feature_importance"] = str(get_feature_importance_pictures(device_id))
     return pictures
 
 # --- 1. Weather Station Information --- #
