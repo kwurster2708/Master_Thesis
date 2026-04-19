@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 
 import ollama
-from schema_3 import get_full_schema, get_connection
+from schema_4 import get_full_schema, get_connection
 
 
 # -----------------------------
@@ -91,7 +91,7 @@ def save_experiment_output(llm_output, logging_info, device_id, model_tag, confi
     return str(filepath)
 
 
-def generate_prompt(schema_data, device_id):
+def generate_prompt(schema_data, device_id):    
     prompt = f"""
 Schema:
 {json.dumps(schema_data, indent=2, default=list)}
@@ -123,6 +123,8 @@ What is important:
 * Clarity: Deliver straightforward and easily comprehensible summaries. 
 * Relevance: Ensure insights are directly applicable to the end user. 
 * Actionability: Focus on providing practical suggestions or conclusions. 
+* Use these images together with the schema.
+* Only refer to what is clearly visible in the images.
 
 Do not include obvious elements (numbers, text) from the given input unless needed.
 
