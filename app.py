@@ -1,6 +1,6 @@
 #-- Importing necessary libraries --
 import re
-from schema_2 import get_full_schema, get_all_outlier_devices, get_connection
+from schema_3 import get_full_schema, get_all_outlier_devices, get_connection
 import streamlit as st
 import sqlite3
 import ollama
@@ -83,28 +83,42 @@ def generate_prompt(schema_data, device_id):
     Schema:
 {json.dumps(schema_data, indent=2, default=list)}
 
-Based on the information provided in the schema and additional information that helps to provide a good answer, provide an easy to understand interpretation for why the weather station {device_id} is an anomaly. 
-What does that mean for future predictions of the weather station? 
+You are helping users understand the behaviour of a machine learning model. Based on the information provided in the schema and additional information that helps to provide a good answer, provide an easy to understand interpretation for why the weather station {device_id} is an anomaly. What does that mean for future predictions of the weather station? 
 
-Important information regarding the data at hand:
+Special rules:
+* Important information regarding the data in the schema at hand:
 * The data has entries up until July 2024 treat the data as if today is the 1st July 2024.
 * The data consists of multiple local models that are running on the weather station to predict the temperature.
-* The local model on each weather station is continuously updated using incremental learning. The data provided is always for the active local model on the weather station (except for the Model Version History and the Historical Feature Importance).
+* The local model on each weather station is continuously updated using federated learning.
 * Every weather station has multiple tags that show the attributes of the device.  For each of these tags an outlier score exists that signalizes how different the weather station performance is compared to weather stations with the same tag.
-* The schema represents multiple different weather stations in the same state or country.
 
 Chain of thought instructions:
-1. Briefly analyze what the explanation is saying.
-2. Check whether it correctly answers why the anomaly occurred.
-3. Assess whether it uses feature importance and performance information correctly.
-4. Evaluate clarity, completeness, and usefulness for a non-expert user.
-5. Based on your reasoning, assign scores.
-Think step-by-step internally before answering, but do NOT include your reasoning in the final output.
+Step 1: Read and understand the schema carefully.
+Step 2: Identify the most important signals and determine which parts of the schema are most relevant for explaining the unusual behaviour.
+Step 3: Analyze relationships between the different pieces of information and think about how the different inputs relate to each other.
+Step 4: Put the weather station {device_id} into context (interpret the station not in isolation).
+Step 5: Use additional background knowledge when helpful (domain knowledge, environmental conditions etc.).
+Step 6: Generate possible reasons for the unusual behaviour.
+Step 7: Check your reasoning critically.
+Step 8: Create practical recommendations.
+Step 9: Write the final explanation for a non-expert industrial user based on the previous steps.
 
-The answer has to be provided in an easy language that a user without a data background can understand. Make sure to provide short and concise answers that answer the questions at hand without unnecessary information. The output should have the following structure:
-1. Interpretation: Why is the weather station {device_id} behaving like an anomaly?
-2. What does this mean for future predictions of the weather station {device_id}?
-3. Provide a short statement of reasoning to justify your answer, but keep it concise and non-technical.
+Output Instructions:
+The answer has to be provided in an easy language that a user without a data background can understand. Make sure to provide short and concise answers that answer the questions at hand without unnecessary information. 
+
+What is important:
+* Clarity: Deliver straightforward and easily comprehensible summaries. 
+* Relevance: Ensure insights are directly applicable to the end user. 
+* Actionability: Focus on providing practical suggestions or conclusions. 
+* Use these images together with the schema.
+* Only refer to what is clearly visible in the images.
+
+Do not include obvious elements (numbers, text) from the given input unless needed.
+
+The output should have the following structure:
+1. Interpretation: Why is this weather station {device_id} behaving unusually? Explain to the engineer why the weather station is showcasing this unusual behaviour!
+2. Future Predictions: What does this mean for future predictions of the weather station {device_id}? Give recommendations on what the engineer should do!
+3. Reasoning: Provide a short statement of reasoning to justify your answer, but keep it concise and non-technical.
 """
     
     return structure
