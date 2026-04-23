@@ -101,13 +101,12 @@ def save_experiment_output(llm_output, logging_info, device_id, model_tag, confi
 
     return str(filepath)
 
-
 def generate_prompt(schema_data, device_id):    
     prompt = f"""
 Schema:
 {json.dumps(schema_data, indent=2, default=list)}
 
-You are helping users understand the behaviour of a machine learning model. Based on the information provided in the schema and additional information that helps to provide a good answer, provide an easy to understand interpretation for why the weather station {device_id} is an anomaly. What does that mean for future predictions of the weather station? 
+You are helping users understand the behaviour of a machine learning model. Based on the information provided in the schema and additional information that helps to provide a good answer, provide an easy to understand interpretation for why the weather station {device_id} is an anomaly. If pictures are attached, use them together with the schema as additional evidence. Interpret the pictures carefully and use them to support your explanation of model performance and feature importance. What does that mean for future predictions of the weather station? 
 
 Special rules:
 * Important information regarding the data in the schema at hand:
@@ -115,15 +114,16 @@ Special rules:
 * The data consists of multiple local models that are running on the weather station to predict the temperature.
 * The local model on each weather station is continuously updated using federated learning.
 * Every weather station has multiple tags that show the attributes of the device.  For each of these tags an outlier score exists that signalizes how different the weather station performance is compared to weather stations with the same tag.
+* If pictures are provided, they may show model performance over time and/or feature importance. Use these pictures as part of the analysis, but only refer to patterns that are clearly visible.
 
 Chain of thought instructions:
-Step 1: Read and understand the schema carefully.
-Step 2: Identify the most important signals and determine which parts of the schema are most relevant for explaining the unusual behaviour.
+Step 1: Read and understand the schema carefully. If pictures are attached, inspect them carefully before forming conclusions. 
+Step 2: Identify the most important signals and determine which parts of the schema and which visible picture patterns are most relevant for explaining the unusual behaviour.
 Step 3: Analyze relationships between the different pieces of information and think about how the different inputs relate to each other.
 Step 4: Put the weather station {device_id} into context (interpret the station not in isolation).
 Step 5: Use additional background knowledge when helpful (domain knowledge, environmental conditions etc.).
 Step 6: Generate possible reasons for the unusual behaviour.
-Step 7: Check your reasoning critically.
+Step 7: Check your reasoning critically and make sure that claims based on pictures are supported by clearly visible evidence.
 Step 8: Create practical recommendations.
 Step 9: Write the final explanation for a non-expert industrial user based on the previous steps.
 
@@ -134,10 +134,10 @@ What is important:
 * Clarity: Deliver straightforward and easily comprehensible summaries. 
 * Relevance: Ensure insights are directly applicable to the end user. 
 * Actionability: Focus on providing practical suggestions or conclusions. 
-* Use these images together with the schema.
-* Only refer to what is clearly visible in the images.
+* Use of Pictures: When pictures are attached, use them to strengthen the explanation, especially for visible performance trends and feature importance patterns.
+* Visual Grounding: Only describe picture content that is clearly visible, and do not make assumptions beyond what the pictures show.
 
-Do not include obvious elements (numbers, text) from the given input unless needed.
+Do not include obvious elements (numbers, text) from the given input unless needed. When pictures are attached, incorporate their content naturally into the explanation without separately listing or describing the images unless necessary.
 
 The output should have the following structure:
 1. Interpretation: Why is this weather station {device_id} behaving unusually? Explain to the engineer why the weather station is showcasing this unusual behaviour!
@@ -146,11 +146,29 @@ The output should have the following structure:
 """
     return prompt.strip()
 
+def get_image_paths_from_schema(schema_data):
+    pictures = schema_data.get("pictures", {})
+    image_paths = []
+    perf = pictures.get("performance")
+    fi = pictures.get("feature_importance")
+    if perf:
+        image_paths.append(str(perf))
+    if fi:
+        image_paths.append(str(fi))
 
-def run_llm(model_tag, prompt, think=True, temperature=0):
+    return image_paths[:2]
+
+def run_llm(model_tag, prompt, image_paths, think=True, temperature=0):
+    if image_paths:
+        print("Sending images:", image_paths[:2])
+        used_images = image_paths[:2]  # Use only the first 2 images for the prompt
+    else:
+        print("No images sent.")
+        used_images = []
+    
     response = ollama.chat(
         model=model_tag,
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": "user", "content": prompt, "images": used_images}],
         think=think,
         stream=False,
         options={
@@ -171,14 +189,17 @@ def generate_for_device(conn, device_id, model_key, config, output_dir="Experime
         include_model_performance=config["include_performance"],
         include_feature_sensitivity=config["include_feature_sensitivity"],
     )
-
+    image_paths = get_image_paths_from_schema(schema_data)
     prompt = generate_prompt(schema_data, device_id)
     logging_info = create_logging(model_tag, schema_data, device_id, config_name)
+
+    print(f"Image paths sent for device {device_id}: {image_paths}")
 
     try:
         llm_output = run_llm(
             model_tag=model_tag,
             prompt=prompt,
+            image_paths=image_paths,
             think=model_cfg.get("think", True),
             temperature=0,
         )

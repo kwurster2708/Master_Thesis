@@ -28,7 +28,7 @@ def sanitize_filename(name):
     return re.sub(r'[<>:"/\\|?*]', "_", str(name))
 
 def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name):
-    base_path = Path("Experiment2")
+    base_path = Path("Experiment3")
     
     #sanitize model names
     safe_model_tag = sanitize_filename(model_tag)
