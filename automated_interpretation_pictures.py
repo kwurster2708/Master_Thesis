@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 
 import ollama
-from schema_4 import get_full_schema, get_connection
+from schema_5 import get_full_schema, get_connection
 
 
 # -----------------------------
@@ -82,7 +82,7 @@ def create_logging(model_used, schema, device_id, config_name):
 #     }
 #     return log
 
-def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment4"):
+def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment5"):
     base_path = Path(base_dir)
 
     safe_model_tag = sanitize_filename(model_tag)
@@ -178,7 +178,7 @@ def run_llm(model_tag, prompt, image_paths, think=True, temperature=0):
     return response["message"]["content"]
 
 
-def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment4"):
+def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment5"):
     model_cfg = MODELS[model_key]
     model_tag = model_cfg["tag"]
     config_name = config["name"]
@@ -227,7 +227,7 @@ def generate_for_device(conn, device_id, model_key, config, output_dir="Experime
     }
 
 
-def run_batch(device_ids, selected_models=None, output_dir="Experiment4"):
+def run_batch(device_ids, selected_models=None, output_dir="Experiment5"):
     conn = get_connection()
     results = []
 
@@ -281,7 +281,7 @@ def parse_args():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="Experiment4",
+        default="Experiment5",
         help="Base output directory for JSON files.",
     )
     return parser.parse_args()
