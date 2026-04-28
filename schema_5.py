@@ -78,10 +78,36 @@ def get_device_information(conn, device_id):
                     WHERE device_id = {device_id}
                     """)
         classification = cur.fetchone()[0]
+        
+        cur.execute(f"""
+        SELECT avg(sm.performance_score), sm.id
+        FROM active_model_lookup aml
+        JOIN metric m
+            ON m.localmodel_id = aml.localmodel_id
+        JOIN seedmodel sm
+            ON sm.id = m.seedmodel_id
+        JOIN tag t
+            ON t.id = sm.tag_id
+        WHERE aml.device_id = {device_id}
+          AND t.key = 'All'
+        GROUP BY sm.id
+        ORDER BY sm.id DESC
+        LIMIT 1;
+    """)
+        row = cur.fetchone()
+        
+        seedmodel_performance = None
+        if row is not None:
+            seedmodel_performance = (
+                "good prediction"
+                if row[0] >= 1
+                else "worse than predicting mean"
+        )
                 
         return {
                 "weather_station_classification": classification,
                 "tags": tags_dict,
+                "global_seedmodel_performance": seedmodel_performance,
                 "weather_station_id": f"d{device_id}"
             }
     except sqlite3.Error:
@@ -114,7 +140,7 @@ def get_functioning_information(conn, device_id):
     except sqlite3.Error:
         print(f"Error executing diagnostic event query for Device ID {device_id}")
         return {}
-    
+
 # --- 2. Model Performance Context --- #
 def get_model_performance(conn, device_id):
     cur = conn.cursor()
@@ -125,9 +151,19 @@ def get_model_performance(conn, device_id):
                     ON aml.localmodel_id = mpp.localmodel_id
                     WHERE aml.device_id = {device_id};""")
         rows = cur.fetchall()
+        
+        monthly_scores = {}
+
+        for performance_score, analytics_time in rows:
+            dt = datetime.fromisoformat(str(analytics_time))
+            month_key = dt.strftime("%Y_%B")
+            if month_key not in monthly_scores:
+                monthly_scores[month_key] = []
+            monthly_scores[month_key].append(performance_score)
+        
         performance_dict = {
-            f"{analytics_time}": performance_score
-            for performance_score, analytics_time in rows
+            f"error_score_{month}": sum(scores) / len(scores)
+            for month, scores in sorted(monthly_scores.items())
         }
         
         cur.execute(f"""SELECT mpt.trend, vhp.trend
@@ -161,8 +197,35 @@ def get_tag_diagnostics(conn, device_id):
         result = {}
         
         for r in rows: #every tag just once
+            
+            cur.execute(f"""
+            SELECT avg(sm.performance_score), sm.id
+            FROM active_model_lookup aml
+            JOIN metric m
+            ON m.localmodel_id = aml.localmodel_id
+            JOIN seedmodel sm
+            ON sm.id = m.seedmodel_id
+            JOIN tag t
+            ON t.id = sm.tag_id
+            WHERE aml.device_id = {device_id}
+            AND t.value = '{r[0]}'
+            GROUP BY sm.id
+            ORDER BY sm.id DESC
+            LIMIT 1;
+            """)
+            seed = cur.fetchone()
+    
+            seedmodel_performance = None
+            if seed is not None:
+                seedmodel_performance = (
+                    "good prediction"
+                    if seed[0] >= 1
+                    else "worse than predicting mean"
+                )
+            
             result[f"{r[0]}"] = {'error_score': r[1],
-                               'outlier_score': r[2]
+                               'outlier_score': r[2],
+                               'seedmodel_performance': seedmodel_performance
                                }
         return result
     
@@ -384,9 +447,12 @@ def get_full_schema(conn, device_id, include_model_performance=True,
         functioning_schema = get_functioning_stations(conn, country, state)
     
     full_schema = {
-        "pictures": get_pictures(device_id, include_model_performance, include_feature_sensitivity),
+        "pictures": get_pictures(device_id, include_feature_sensitivity),
         "to_be_evaluated_weather_station": schema,
         "functioning_weather_stations": functioning_schema
     } 
     
     return full_schema
+
+conn = get_connection()
+print(get_full_schema(conn, 88))
