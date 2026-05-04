@@ -1,5 +1,8 @@
 import sqlite3
 from datetime import datetime
+from pathlib import Path
+
+PICTURE_BASE_DIR = Path(r"\Users\Kim_W\Ekkono_Code\pictures")
 
 def get_connection():
     return sqlite3.connect(r"\Users\Kim_W\Ekkono_Code\WeatherData.sqlite")
@@ -45,7 +48,21 @@ def get_country_state(conn, device_id):
     except sqlite3.Error:
         return None, None
 
-# --- FUNCTIONS TO CREATE SCHEMA ---#
+# --- Pictures --- #
+
+def get_performance_pictures(device_id):
+    return PICTURE_BASE_DIR/f"performance/d{device_id}_performance.png"
+
+def get_feature_importance_pictures(device_id):
+    return PICTURE_BASE_DIR/f"feature_importance/d{device_id}_feature_importance.png"
+
+def get_pictures(device_id, include_performance=True, include_feature_importance=True):
+    pictures = {}
+    if include_performance:
+        pictures["performance"] = str(get_performance_pictures(device_id))
+    if include_feature_importance:
+        pictures["feature_importance"] = str(get_feature_importance_pictures(device_id))
+    return pictures
 
 # --- 1. Weather Station Information --- #
 def get_device_information(conn, device_id):
@@ -101,70 +118,6 @@ def get_functioning_information(conn, device_id):
             }
     except sqlite3.Error:
         print(f"Error executing diagnostic event query for Device ID {device_id}")
-        return {}
-
-# --- 2. Model Performance Context --- #
-def get_model_performance(conn, device_id):
-    cur = conn.cursor()
-    try:
-        cur.execute(f"""SELECT mpp.performance_score, mpp.analytics_time
-                    FROM active_model_lookup aml
-                    JOIN model_performance_pivot mpp
-                    ON aml.localmodel_id = mpp.localmodel_id
-                    WHERE aml.device_id = {device_id};""")
-        rows = cur.fetchall()
-        performance_dict = {
-            f"{analytics_time}": performance_score
-            for performance_score, analytics_time in rows
-        }
-        
-        cur.execute(f"""SELECT mpt.trend, vhp.trend
-                    FROM active_model_lookup aml
-                    JOIN model_performance_trend mpt
-                    ON aml.localmodel_id = mpt.localmodel_id
-                    LEFT JOIN version_history_performance vhp
-                    ON aml.device_id = vhp.device_id
-                    WHERE aml.device_id = {device_id};""")
-        row = cur.fetchone()
-        
-        if row:
-            return {
-                "model_version_performance_trend": row[1], 
-                "model_performance_trend": row[0],
-                "performance": performance_dict
-            }
-    
-    except sqlite3.Error as e:
-        print(f"Error executing metric information query: {e}")
-
-# --- 3. Feature Importance --- #
-def get_feature_sensitivity(conn, device_id):
-    """Get feature sensitivity information"""
-    cur = conn.cursor()
-    try:
-        cur.execute(f"""SELECT fst.top_feature_1, fst.importance_1, 
-                    fst.top_feature_2, fst.importance_2,
-                    fst.top_feature_3, fst.importance_3,
-                    fst.top_feature_4, fst.importance_4,
-                    fst.top_feature_5, fst.importance_5
-                    FROM active_model_lookup aml
-                    JOIN feature_sensitivity_top3 fst ON
-                    aml.modelbinary_id = fst.modelbinary_id
-                    WHERE aml.device_id = {device_id}""")
-        row = cur.fetchone()
-        
-        top_features = []
-        
-        if row:
-            for i in range(5):
-                if row[i*2+1]: top_features.append({row[i*2]: row[i*2+1]})
-        
-        top5 = {k: v for d in top_features for k, v in d.items()}
-        
-        return {
-            "top_5_features_active_model": top5
-        }
-    except sqlite3.Error:
         return {}
 
 # --- 4. Tag Diagnostics --- #
@@ -263,8 +216,6 @@ def get_functioning_stations(conn, country, state):
     for (device_id,) in rows:
         station_schema = {
             "weather_station_information": get_functioning_information(conn, device_id),
-            "model_performance_context": get_model_performance(conn, device_id),
-            "feature_importance": get_feature_sensitivity(conn, device_id),
             "tag_diagnostics": get_tag_diagnostics(conn, device_id)
         }
         functioning_stations.append(station_schema)
@@ -317,8 +268,7 @@ def get_functioning_stations_FI(conn, country, state):
     functioning_stations = []
     for (device_id,) in rows:
         station_schema = {
-            "weather_station_information": get_functioning_information(conn, device_id),
-            "feature_importance": get_feature_sensitivity(conn, device_id)
+            "weather_station_information": get_functioning_information(conn, device_id)
         }
         functioning_stations.append(station_schema)
     
@@ -371,7 +321,6 @@ def get_functioning_stations_P(conn, country, state):
     for (device_id,) in rows:
         station_schema = {
             "weather_station_information": get_functioning_information(conn, device_id),
-            "model_performance_context": get_model_performance(conn, device_id),
             "tag_diagnostics": get_tag_diagnostics(conn, device_id)
         }
         functioning_stations.append(station_schema)
@@ -387,12 +336,7 @@ def get_full_schema(conn, device_id, include_model_performance=True,
     schema = {
     "Weather Station Information": get_device_information(conn, device_id)
     }
-    if include_model_performance:
-        schema["Model Performance Context"] = get_model_performance(conn, device_id)
-    
-    if include_feature_sensitivity:
-        schema["Feature Importance"] = get_feature_sensitivity(conn, device_id)
-    
+
     if include_model_performance:
         schema["Tag Diagnostics"] = get_tag_diagnostics(conn, device_id)
         
@@ -408,6 +352,7 @@ def get_full_schema(conn, device_id, include_model_performance=True,
         functioning_schema = get_functioning_stations(conn, country, state)
     
     full_schema = {
+        "pictures": get_pictures(device_id, include_model_performance, include_feature_sensitivity),
         "to_be_evaluated_weather_station": schema,
         "functioning_weather_stations": functioning_schema
     } 
