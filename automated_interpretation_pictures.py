@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 
 import ollama
-from schema_5 import get_full_schema, get_connection
+from schema_3 import get_full_schema, get_connection
 
 
 # -----------------------------
@@ -58,29 +58,22 @@ def sanitize_filename(name):
 def create_logging(model_used, schema, device_id, config_name):
     
     if config_name == "Performance":
-        configuration = "Model Performance"
+        configuration = "Model Performance, Outliers per Tags"
     elif config_name == "FeatureImportance":
-        configuration = "Feature Importance"
+        configuration = "Feature Importance, Outliers per Tags"
     elif config_name == "Combination":
-        configuration = "Model Performance and Feature Importance"
+        configuration = "Model Performance, Outliers per Tags and Feature Importance"
     else:
         configuration = {}
 
     log = {
         "model_used": model_used,
-        "included_information": list(schema["to_be_evaluated_weather_station"].keys()),
+        "included_information": list(schema["inspected_weather_station"].keys()),
         "additional_included_information": configuration,
         "anomaly_id": f"d{device_id}",
     }
     return log
 
-# def create_logging(model_used, schema, device_id):
-#     log = {
-#         "model_used": model_used,
-#         "included_information": list(schema.keys()),
-#         "anomaly_id": f"d{device_id}",
-#     }
-#     return log
 
 def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment5"):
     base_path = Path(base_dir)
@@ -106,24 +99,36 @@ def generate_prompt(schema_data, device_id):
 Schema:
 {json.dumps(schema_data, indent=2, default=list)}
 
-You are helping users understand the behaviour of a machine learning model. Based on the information provided in the schema and additional information that helps to provide a good answer, provide an easy to understand interpretation for why the weather station {device_id} is an anomaly. If pictures are attached, use them together with the schema as additional evidence. Interpret the pictures carefully and use them to support your explanation of model performance and feature importance. What does that mean for future predictions of the weather station? 
+You are helping users understand the behaviour of a machine learning model in an edge machine learning context. Based on the information provided in the schema and additional information, provide an easy to understand interpretation for why the weather station {device_id} is an anomaly or has a bad performance. If pictures are attached, use them together with the schema as additional evidence. Interpret the pictures carefully and use them to support your explanation of model performance and feature importance. What does that mean for future predictions of the weather station? 
 
-Special rules:
-* Important information regarding the data in the schema at hand:
-* The data has entries up until July 2024 treat the data as if today is the 1st July 2024.
-* The data consists of multiple local models that are running on the weather station to predict the temperature.
-* The local model on each weather station is continuously updated using federated learning.
-* Every weather station has multiple tags that show the attributes of the device.  For each of these tags an outlier score exists that signalizes how different the weather station performance is compared to weather stations with the same tag.
-* If pictures are provided, they may show model performance over time and/or feature importance. Use these pictures as part of the analysis, but only refer to patterns that are clearly visible.
+Important information regarding the data in the schema at hand:
+* The data has entries up until July 2024. Treat the data as if today is the 1st July 2024. The data consists of multiple local models that are running on weather stations to predict the temperature.
+* The local model on each weather station is continuously updated using federated learning. Local metrics are taken from statistics stored with the model on the edge. Global metrics are computed by running the model on a synthetic dataset
+* Every weather station has multiple tags that show the attributes of the device. For each of these tags an outlier score exists that signalises how different the weather station performance is compared to weather stations with the same tag. These outlier scores are portrayed with negative numbers, the closer the score to 0 the better.
+* For the seedmodel performance score and all the RMSE values the higher the value the worse the performance.
+* Reference models are top performing models with similar attributes/tags to the inspected model.
+* If pictures are provided they may show model performance over time and/or feature importance. Use these pictures as part of the analysis, but only refer to patterns that are clearly visible. 
+* Weather Station Classification Explanations:
+    * Underperforming - performing worse than simply predicting the mean
+    * Low Accuracy - functional models with insufficient accuracy
+    * Full Outlier - models with acceptable performance but significantly different from other models
+    * Partial Outlier - models considered outliers relative to other models.
+* Problem Pattern Explanations:
+    * Device specific - bad performance across many tags
+    * Tag specific - worst outlier tag is also the worst performing tag
+    * General performance specific - bad performance but few outliers
+    * Non specific - good performance and few outliers
+    * Model behaviour change - many outliers but predictions still good
+    * else uncertain
 
 Chain of thought instructions:
 Step 1: Read and understand the schema carefully. If pictures are attached, inspect them carefully before forming conclusions. 
-Step 2: Identify the most important signals and determine which parts of the schema and which visible picture patterns are most relevant for explaining the unusual behaviour.
+Step 2: Identify the most important signals and determine which parts of the schema and which visible picture patterns are most relevant for explaining the unusual behaviour or bad performance.
 Step 3: Analyze relationships between the different pieces of information and think about how the different inputs relate to each other.
 Step 4: Put the weather station {device_id} into context (interpret the station not in isolation).
-Step 5: Use additional background knowledge when helpful (domain knowledge, environmental conditions etc.).
-Step 6: Generate possible reasons for the unusual behaviour.
-Step 7: Check your reasoning critically and make sure that claims based on pictures are supported by clearly visible evidence.
+Step 5: Use additional domain knowledge when helpful (domain knowledge, environmental conditions, specific time period etc.).
+Step 6: Generate possible reasons for the unusual behaviour or bad performance.
+Step 7: Check your reasoning critically and make sure that claims based on pictures are supported by clearly visible evidence. 
 Step 8: Create practical recommendations.
 Step 9: Write the final explanation for a non-expert industrial user based on the previous steps.
 
@@ -134,13 +139,21 @@ What is important:
 * Clarity: Deliver straightforward and easily comprehensible summaries. 
 * Relevance: Ensure insights are directly applicable to the end user. 
 * Actionability: Focus on providing practical suggestions or conclusions. 
+* Use these images together with the schema.
+* Only refer to what is clearly visible in the images.
+
+The answer has to be provided in an easy language that a user without a data background can understand.
+What is important:
+* Clarity: Deliver straightforward and easily comprehensible summaries. 
+* Relevance: Ensure insights are directly applicable to the end user. 
+* Actionability: Focus on providing practical suggestions or conclusions. 
 * Use of Pictures: When pictures are attached, use them to strengthen the explanation, especially for visible performance trends and feature importance patterns.
-* Visual Grounding: Only describe picture content that is clearly visible, and do not make assumptions beyond what the pictures show.
+* Visual Grounding: Only describe picture content that is clearly visible, and do not make assumptions beyond what the pictures show. 
 
 Do not include obvious elements (numbers, text) from the given input unless needed. When pictures are attached, incorporate their content naturally into the explanation without separately listing or describing the images unless necessary.
 
 The output should have the following structure:
-1. Interpretation: Why is this weather station {device_id} behaving unusually? Explain to the engineer why the weather station is showcasing this unusual behaviour!
+1. Interpretation: Why is this weather station {device_id} behaving unusually or exhibits bad performance? Explain to the engineer why the weather station is showcasing this unusual behaviour!
 2. Future Predictions: What does this mean for future predictions of the weather station {device_id}? Give recommendations on what the engineer should do!
 3. Reasoning: Provide a short statement of reasoning to justify your answer, but keep it concise and non-technical.
 """
@@ -148,20 +161,27 @@ The output should have the following structure:
 
 def get_image_paths_from_schema(schema_data):
     pictures = schema_data.get("pictures", {})
+    
+    image_keys = [
+        "performance",
+        "feature_importance",
+        "tag_performance",
+        "tag_outliers",
+    ]
+    
     image_paths = []
-    perf = pictures.get("performance")
-    fi = pictures.get("feature_importance")
-    if perf:
-        image_paths.append(str(perf))
-    if fi:
-        image_paths.append(str(fi))
+    
+    for key in image_keys:
+        path = pictures.get(key)
+        if path and Path(path).exists():
+            image_paths.append(str(path))
 
-    return image_paths[:2]
+    return image_paths[:4]  # Limit to first 4 images
 
-def run_llm(model_tag, prompt, image_paths, think=True, temperature=0):
+def run_llm(model_tag, prompt, image_paths, think=True):
     if image_paths:
-        print("Sending images:", image_paths[:2])
-        used_images = image_paths[:2]  # Use only the first 2 images for the prompt
+        print("Sending images:", image_paths[:4])
+        used_images = image_paths[:4]  # Use only the first 4 images for the prompt
     else:
         print("No images sent.")
         used_images = []
@@ -172,10 +192,21 @@ def run_llm(model_tag, prompt, image_paths, think=True, temperature=0):
         think=think,
         stream=False,
         options={
-            "temperature": temperature,
+            "temperature": 0.4,
+            "top_p": 0.9,
+            "num_predict": 750,
         },
     )
-    return response["message"]["content"]
+    llm_output = response["message"]["content"]
+    
+    metadata = {
+        "input_length_tokens": response.get("prompt_eval_count"),
+        "duration_seconds": (response.get("total_duration")/ 1_000_000_000
+            if response.get("total_duration") is not None
+            else None),
+    }
+    
+    return llm_output, metadata
 
 
 def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment5"):
@@ -201,9 +232,18 @@ def generate_for_device(conn, device_id, model_key, config, output_dir="Experime
             prompt=prompt,
             image_paths=image_paths,
             think=model_cfg.get("think", True),
-            temperature=0,
         )
         logging_info["status"] = "success"
+    except Exception as e:
+        llm_output, metadata = run_llm(
+            model_tag=model_tag,
+            prompt=prompt,
+            image_paths=image_paths,
+            think=model_cfg.get("think", True),
+        )
+        logging_info["status"] = "success"
+        logging_info["ollama_metadata"] = metadata
+        
     except Exception as e:
         llm_output = f"Error: {str(e)}"
         logging_info["status"] = "error"
