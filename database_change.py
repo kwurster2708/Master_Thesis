@@ -11,15 +11,13 @@ def get_connection():
 def get_rmse_values():
     """Calculate baseline values (medians) from all models for normalization"""
     conn = get_connection()
-    
     cur = conn.cursor()
 
     cur.execute("""
     SELECT 
         AVG(CASE WHEN name = 'rmse' THEN value END),
         MAX(CASE WHEN name = 'rmse' THEN value END),
-        MIN(CASE WHEN name = 'rmse' THEN value END),
-        AVG(CASE WHEN name = 'cde.std' THEN value END)
+        MIN(CASE WHEN name = 'rmse' THEN value END)
     FROM metric;
     """)
     result = cur.fetchone()
@@ -27,13 +25,10 @@ def get_rmse_values():
     rmse = {
         "avg": result[0],
         "max": result[1],
-        "min": result[2],
-        "std": result[3]
+        "min": result[2]
     }
-    
     conn.close()
     return rmse
-
 
 RMSE = None  # Will be populated on first use
 
@@ -72,7 +67,7 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
             outlier_ratio REAL
         )
     """)
-
+    
     cur.execute("""
     SELECT
         aml.device_id,
@@ -81,19 +76,14 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
     (SELECT value FROM metric 
      WHERE name = 'rmse' 
      AND localmodel_id = aml.localmodel_id 
-     ORDER BY update_time DESC LIMIT 1) AS local_rmse,
-
-    (SELECT value FROM metric 
-     WHERE name = 'cde.std' 
-     AND localmodel_id = aml.localmodel_id 
-     ORDER BY update_time DESC LIMIT 1) AS local_std
+     ORDER BY update_time DESC LIMIT 1) AS local_rmse
 
     FROM active_model_lookup aml;
     """)
     
     data = cur.fetchall()
     
-    high_rmse_threshold = rmse['avg'] * 3.5 # the multiplicator is chosen by me
+    high_rmse_threshold = 11.20 # based on the distribution graph
     skill_threshold = 1.0 # this threshold is given by the Case Study
     
     cur.execute("""
@@ -109,7 +99,7 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
 
     classifications = []
     for row in data:
-        device_id, localmodel_id, local_rmse, local_std = row
+        device_id, localmodel_id, local_rmse = row
         
         if local_rmse is None:
             continue
@@ -118,20 +108,12 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
         nrmse_avg = (rmse['avg'] - rmse["min"])/(rmse['max'] - rmse['min'])
         
         relative_score = local_nrmse/nrmse_avg
-        if local_std is not None:
-            std = 0.5 * rmse['std'] + 0.5 * local_std
-        else:
-            std = 0.5 * rmse['std'] + 0.5
-        skill_score = relative_score /(4 + std)
-        #if local_std is not None:
-            #skill_score = local_std/((local_rmse - rmse['min'])/(rmse['max'] - rmse['min'])) #this calculation is chosen by me
-        # else:
-        #     skill_score = 1.0/((local_rmse - rmse['min'])/(rmse['max'] - rmse['min'])) #this calculation is chosen by me
-
+        skill_score = relative_score/3
+        
         total_tags, warning_count = warning_data.get(device_id, (0, 0))
         warning_pct = (warning_count / total_tags) if total_tags > 0 else 0
 
-        classification = "No Outlier"
+        classification = "Functioning"
 
         if skill_score > skill_threshold:
             classification = "Underperforming"
@@ -150,6 +132,7 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
             local_rmse, 
             warning_pct
         ))
+
 
     cur.executemany("""
         INSERT INTO device_outlier_classification 
@@ -172,7 +155,6 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
 
     conn.close()
     print("\n ✓ Table 'device_outlier_classification' created successfully.")
-
 
 # --- CREATING NEW TABLES IN DATABASE --- #
 
@@ -205,31 +187,50 @@ def create_model_performance_pivot():
     
     cur.execute("DROP TABLE IF EXISTS model_performance_pivot")
     
-    cur.execute("""CREATE TABLE IF NOT EXISTS model_performance_pivot AS
-                SELECT * 
-                FROM (
-                    SELECT mh.device_id, mh.localmodel_id,  
-                    AVG(mh.rmse) as performance_score,
+    cur.execute("""
+                CREATE TABLE IF NOT EXISTS model_performance_pivot AS
+                SELECT
+                    mh.device_id, mh.localmodel_id,  
+                    AVG(mh.rmse) AS global_rmse,
                     mh.analytics_time,
-                    lm.version_number,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY mh.localmodel_id 
-                        ORDER BY mh.analytics_time DESC
-                    ) as rn
+                    lm.version_number
                     FROM modelhealth mh
                     JOIN tag t ON mh.tag_id = t.id
                     JOIN  localmodel lm ON mh.localmodel_id = lm.id
                 WHERE t.key = 'All' 
                 GROUP BY mh.device_id, mh.localmodel_id, mh.analytics_time,
-                lm.version_number)
-                WHERE rn < 11;
-                 """)
+                lm.version_number;""")
     
     cur.execute("""CREATE INDEX IF NOT EXISTS 
                 idx_mpp_localmodel_id ON model_performance_pivot (localmodel_id);""")
     conn.commit()
     conn.close()
     print(f"✓ model_performance_pivot table created")
+
+def create_model_performance_metrics():
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    cur.execute("DROP TABLE IF EXISTS model_performance_metrics")
+    
+    cur.execute("""CREATE TABLE IF NOT EXISTS model_performance_metrics AS
+                SELECT
+                    m.localmodel_id,  
+                    m.seedmodel_id,
+                    m.update_time,
+                    AVG(CASE 
+                            WHEN m.name = 'rmse' THEN m.value 
+                        END) AS "local_rmse"
+                FROM metric m
+                WHERE m.name = 'rmse' AND m.value IS NOT NULL
+                GROUP BY m.localmodel_id, m.update_time, m.seedmodel_id;
+                """)
+    
+    cur.execute("""CREATE INDEX IF NOT EXISTS 
+                idx_mpm_localmodel_id ON model_performance_metrics (localmodel_id);""")
+    conn.commit()
+    conn.close()
+    print(f"✓ model_performance_metrics table created")
 
 # --- Active Model Performance Summary Table --- #
 def create_model_performance_trend():
@@ -239,52 +240,51 @@ def create_model_performance_trend():
     
     cur.execute("DROP TABLE IF EXISTS model_performance_trend")
     
-    cur.execute("""CREATE TABLE IF NOT EXISTS model_performance_trend AS
-    WITH base AS (
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS model_performance_trend AS
+        WITH base AS (
+            SELECT 
+                localmodel_id,
+                analytics_time,
+                global_rmse AS metric_value
+            FROM model_performance_pivot
+            WHERE global_rmse IS NOT NULL
+        ),
+
+        ranked AS (
+            SELECT *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY localmodel_id
+                    ORDER BY datetime(analytics_time) DESC
+                ) AS rn
+            FROM base
+        ),
+
+        comparison AS (
+            SELECT 
+                localmodel_id,
+
+                -- latest 10 avg
+                AVG(CASE WHEN rn <= 10 THEN metric_value END) AS avg_recent,
+
+                -- past avg
+                AVG(CASE WHEN rn > 10 THEN metric_value END) AS avg_past
+
+            FROM ranked
+            GROUP BY localmodel_id
+        )
+
         SELECT 
-            mh.localmodel_id,
-            mh.analytics_time,
-            mh.rmse AS metric_value
-    FROM modelhealth mh
-    WHERE mh.tag_id = (
-        SELECT id FROM tag WHERE key = 'All'
-    )
-    ),
+            c.localmodel_id,
 
-    ranked AS (
-    SELECT *,
-        ROW_NUMBER() OVER (
-            PARTITION BY localmodel_id 
-            ORDER BY analytics_time DESC
-        ) AS rn
-    FROM base
-    ),
+            CASE 
+                WHEN c.avg_past IS NULL THEN 'stable'
+                WHEN c.avg_recent < c.avg_past * 0.90 THEN 'improving'
+                WHEN c.avg_recent > c.avg_past * 1.10 THEN 'degrading'
+                ELSE 'stable'
+            END AS global_rmse_trend
 
-    comparison AS (
-    SELECT 
-        localmodel_id,
-
-        -- latest 6 avg
-        AVG(CASE WHEN rn <= 6 THEN metric_value END) AS avg_recent,
-
-        -- past avg
-        AVG(CASE WHEN rn > 6 THEN metric_value END) AS avg_past
-
-    FROM ranked
-    GROUP BY localmodel_id
-    )
-
-    SELECT 
-    c.localmodel_id,
-
-    CASE 
-        WHEN c.avg_past IS NULL THEN 'stable'
-        WHEN c.avg_recent < c.avg_past * 0.90 THEN 'improving'
-        WHEN c.avg_recent > c.avg_past * 1.10 THEN 'degrading'
-        ELSE 'stable'
-    END AS trend
-
-    FROM comparison c;
+        FROM comparison c;
     """)
     
     cur.execute("CREATE INDEX IF NOT EXISTS idx_mpt_localmodel ON model_performance_trend(localmodel_id);")
@@ -292,67 +292,70 @@ def create_model_performance_trend():
     conn.close()
     print("✓ model_performance_trend table created")
 
-# --- Device Model Version History Table --- #
-def create_version_history_performance():
+def create_model_performance_metrics_trend():
+    """Calculate local RMSE and concept drift trend based on model_performance_metrics"""
     conn = get_connection()
-    
     cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS version_history_performance")
-    cur.execute("""CREATE TABLE IF NOT EXISTS version_history_performance AS
-    WITH ranked AS (
-        SELECT 
-            device_id,
-            localmodel_id,
-            version_number,
-            performance_score,
-            ROW_NUMBER() OVER (
-                PARTITION BY device_id 
-                ORDER BY version_number DESC
-            ) AS rn
-        FROM model_performance_pivot),
 
-    latest AS (
-        SELECT * FROM ranked
-        WHERE rn = 1
-    ),
+    cur.execute("DROP TABLE IF EXISTS model_performance_metrics_trend")
 
-    historical AS (
-        SELECT * FROM ranked
-        WHERE rn > 1
-    ),
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS model_performance_metrics_trend AS
+        WITH base AS (
 
-    comparison AS (
-    SELECT 
-        l.device_id,
-        l.performance_score AS recent,
-        (
-            SELECT AVG(h.performance_score)
-            FROM historical h
-            WHERE h.device_id = l.device_id
-        ) AS avg_past
-    FROM latest l
-    )
+            SELECT
+                localmodel_id,
+                update_time,
+                local_rmse AS metric_value
+            FROM model_performance_metrics
+            WHERE local_rmse IS NOT NULL
+        ),
 
-    SELECT 
-    c.device_id,
-    c.avg_past,
+        ranked AS (
+            SELECT *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY localmodel_id
+                    ORDER BY datetime(update_time) DESC
+                ) AS rn
+            FROM base
+        ),
 
-    CASE 
-        WHEN c.avg_past IS NULL THEN 'stable'
-        WHEN c.recent < c.avg_past * 0.90 THEN 'improving'
-        WHEN c.recent > c.avg_past * 1.10 THEN 'degrading'
-        ELSE 'stable'
-    END AS trend,
-    
-    c.recent 
+        comparison AS (
+            SELECT 
+                localmodel_id,
 
-    FROM comparison c
+                -- latest 6 avg
+                AVG(CASE WHEN rn <= 6 THEN metric_value END) AS avg_recent,
+
+                -- past avg
+                AVG(CASE WHEN rn > 6 THEN metric_value END) AS avg_past
+
+            FROM ranked
+            GROUP BY localmodel_id
+        )
+
+       
+            SELECT 
+                localmodel_id,
+
+                CASE 
+                    WHEN avg_past IS NULL THEN 'stable'
+                    WHEN avg_recent < avg_past * 0.90 THEN 'improving'
+                    WHEN avg_recent > avg_past * 1.10 THEN 'degrading'
+                    ELSE 'stable'
+                END AS local_rmse_trend
+
+            FROM comparison;
     """)
-    
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_vhp_device ON version_history_performance(device_id);")
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS 
+        idx_mpmt_localmodel_id ON model_performance_metrics_trend (localmodel_id)
+    """)
+
     conn.commit()
     conn.close()
-    print("✓ version_history_performance table created (excludes active model, uses metric table)")
+    print("✓ model_performance_metrics_trend table created")
 
 # --- Model Feature Importance Table --- #
 def create_feature_sensitivity_top3():
@@ -371,7 +374,7 @@ def create_feature_sensitivity_top3():
             attrs = json.loads(row["attribute_sensitivities"])
             if isinstance(attrs, dict):
                 sorted_attrs = sorted(attrs.items(), key=lambda x: abs(x[1]) 
-                                      if x[1] else 0, reverse=True)[:5]
+                                      if x[1] else 0, reverse=True)[:8]
                 results.append({"modelbinary_id": row["id"],
                                 "top_feature_1": sorted_attrs[0][0] if len(sorted_attrs) > 0 else None,
                                 "importance_1": sorted_attrs[0][1] if len(sorted_attrs) > 0 else None,
@@ -382,7 +385,13 @@ def create_feature_sensitivity_top3():
                                 "top_feature_4": sorted_attrs[3][0] if len(sorted_attrs) > 3 else None,
                                 "importance_4": sorted_attrs[3][1] if len(sorted_attrs) > 3 else None,
                                 "top_feature_5": sorted_attrs[4][0] if len(sorted_attrs) > 4 else None,
-                                "importance_5": sorted_attrs[4][1] if len(sorted_attrs) > 4 else None})
+                                "importance_5": sorted_attrs[4][1] if len(sorted_attrs) > 4 else None,
+                                "top_feature_6": sorted_attrs[5][0] if len(sorted_attrs) > 5 else None,
+                                "importance_6": sorted_attrs[5][1] if len(sorted_attrs) > 5 else None,
+                                "top_feature_7": sorted_attrs[6][0] if len(sorted_attrs) > 6 else None,
+                                "importance_7": sorted_attrs[6][1] if len(sorted_attrs) > 6 else None,
+                                "top_feature_8": sorted_attrs[7][0] if len(sorted_attrs) > 7 else None,
+                                "importance_8": sorted_attrs[7][1] if len(sorted_attrs) > 7 else None})
         except: pass
     pd.DataFrame(results).to_sql("feature_sensitivity_top3", conn, if_exists="replace", index=False)
     
@@ -391,117 +400,101 @@ def create_feature_sensitivity_top3():
     conn.commit()
     conn.close()
     print("✓ feature_sensitivity_top3 table created")
-    
-# --- Historical Feature Sensitivity Table --- #
-def create_feature_sensitivity_historical():
-    """Average feature sensitivity across all previous (non-active) versions"""
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS feature_sensitivity_historical")
-    
-    df = pd.read_sql("""
-        SELECT 
-            device_id,
-            attribute_sensitivities_id,
-            attr_json
-        FROM (SELECT 
-            lm.device_id,
-            lm.version_number,
-            mb.attribute_sensitivities_id,
-            as_attr.attribute_sensitivities AS attr_json,
-            ROW_NUMBER() OVER (
-            PARTITION BY lm.device_id 
-            ORDER BY lm.version_number DESC
-            ) AS rn
-        FROM localmodel lm
-        JOIN modelbinary mb ON lm.modelbinary_id = mb.id
-        JOIN attributesensitivities as_attr ON mb.attribute_sensitivities_id = as_attr.id)
-        WHERE rn > 1
-    """, conn)
-    
-    all_attrs = {}
-    for _, row in df.iterrows():
-        try:
-            attrs = json.loads(row['attr_json'])
-            if row['device_id'] not in all_attrs:
-                all_attrs[row['device_id']] = {}
-            for feat, val in attrs.items():
-                if feat not in all_attrs[row['device_id']]:
-                    all_attrs[row['device_id']][feat] = []
-                all_attrs[row['device_id']][feat].append(val)
-        except: pass
-    
-    results = []
-    for device_id, feat_vals in all_attrs.items():
-        avg_attrs = {k: np.mean(v) for k, v in feat_vals.items()}
-        sorted_attrs = sorted(avg_attrs.items(), key=lambda x: abs(x[1]) if x[1] else 0, reverse=True)[:5]
-        results.append({
-            'device_id': device_id,
-            'hist_top_1': sorted_attrs[0][0] if len(sorted_attrs) > 0 else None, 
-            'hist_sens_1': sorted_attrs[0][1] if len(sorted_attrs) > 0 else None,
-            'hist_top_2': sorted_attrs[1][0] if len(sorted_attrs) > 1 else None, 
-            'hist_sens_2': sorted_attrs[1][1] if len(sorted_attrs) > 1 else None,
-            'hist_top_3': sorted_attrs[2][0] if len(sorted_attrs) > 2 else None, 
-            'hist_sens_3': sorted_attrs[2][1] if len(sorted_attrs) > 2 else None,
-            'hist_top_4': sorted_attrs[3][0] if len(sorted_attrs) > 3 else None, 
-            'hist_sens_4': sorted_attrs[3][1] if len(sorted_attrs) > 3 else None,
-            'hist_top_5': sorted_attrs[4][0] if len(sorted_attrs) > 4 else None, 
-            'hist_sens_5': sorted_attrs[4][1] if len(sorted_attrs) > 4 else None
-        })
-    
-    pd.DataFrame(results).to_sql('feature_sensitivity_historical', conn, if_exists='replace', index=False)
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_fsh_device ON feature_sensitivity_historical(device_id);")
-    conn.commit()
-    conn.close()
-    print("✓ feature_sensitivity_historical table created")
 
 # --- Device Tag Model Diagnostics Table --- #
+def create_seedmodel_diagnostics():  
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS seedmodel_diagnostics")
+    
+    cur.execute("""CREATE TABLE IF NOT EXISTS seedmodel_diagnostics AS
+                SELECT
+                sm.id AS seedmodel_id,
+                sm.tag_id,
+                t.key AS tag_key,
+                t.value AS tag_value,
+                sm.analytics_time,
+                sm.performance_score AS performance_score
+                FROM seedmodel sm
+                LEFT JOIN tag t ON sm.tag_id = t.id;
+                """)
+    cur.execute("""CREATE INDEX IF NOT EXISTS idx_smd_tag 
+                ON seedmodel_diagnostics (tag_id);""")
+    conn.commit()
+    conn.close()
+    print("✓ seedmodel_diagnostics table created")
+    
 def create_device_tag_diagnostics():  
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("DROP TABLE IF EXISTS device_tag_diagnostics")
     
-    cur.execute("""CREATE TABLE IF NOT EXISTS device_tag_diagnostics AS
-                WITH ranked AS (
-                SELECT mh.device_id, mh.localmodel_id, mh.tag_id,
-                mh.analytics_time, mh.mae, mh.mape, mh.rmse, mh.outlier_score_value,
-                
-                ROW_NUMBER() OVER (
-                PARTITION BY mh.device_id, mh.tag_id
-                ORDER BY mh.analytics_time DESC
-                ) AS rn
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS device_tag_diagnostics AS
 
-                FROM modelhealth mh)
-                
-                SELECT
-                mh.device_id,
-                mh.localmodel_id,
-                mh.tag_id,
-                t.value AS tag_value,
-                mh.analytics_time,
-                mh.mae,
-                mh.mape,
-                mh.rmse,
-                
-                mh.rmse AS performance,
-                
-                mh.outlier_score_value,
-                
-                CASE 
-                    WHEN mh.outlier_score_value < -5 THEN 'extreme'
-                    WHEN mh.outlier_score_value < -3.5 THEN 'strong'
-                    WHEN mh.outlier_score_value < -2 THEN 'moderate'
-                    ELSE 'no_outlier'
-                END AS outlier_score
-                
-                FROM ranked mh
-                
-                INNER JOIN active_model_lookup aml ON mh.localmodel_id = aml.localmodel_id
-                AND mh.device_id = aml.device_id
-                LEFT JOIN tag t ON mh.tag_id = t.id
-                
-                WHERE mh.rn = 1 AND t.key IS NOT 'All';
-                """)
+    WITH averaged AS (
+        SELECT
+            mh.device_id,
+            mh.localmodel_id,
+            mh.tag_id,
+            mh.analytics_time AS analytics_time,
+            AVG(mh.rmse) AS rmse,
+            AVG(mh.outlier_score_value) AS outlier_score_value
+
+        FROM modelhealth mh
+
+        WHERE mh.outlier_score_fn = 'local_outlier_factor'
+
+        GROUP BY
+            mh.device_id,
+            mh.localmodel_id,
+            mh.tag_id,
+            datetime(mh.analytics_time)
+    ),
+
+    ranked AS (
+        SELECT
+            averaged.*,
+
+            ROW_NUMBER() OVER (
+                PARTITION BY 
+                    device_id,
+                    localmodel_id,
+                    tag_id
+                ORDER BY datetime(analytics_time) DESC
+            ) AS rn
+
+        FROM averaged
+    )
+
+    SELECT
+        r.device_id,
+        r.localmodel_id,
+        r.tag_id,
+        t.key AS tag_key,
+        t.value AS tag_value,
+        r.analytics_time AS analytics_time_rmse,
+        r.rmse AS global_rmse,
+        r.outlier_score_value,
+
+        CASE 
+            WHEN r.outlier_score_value < -5 THEN 'extreme'
+            WHEN r.outlier_score_value < -3.5 THEN 'strong'
+            WHEN r.outlier_score_value < -2 THEN 'moderate'
+            ELSE 'no_outlier'
+        END AS outlier_score
+
+    FROM ranked r
+
+    LEFT JOIN tag t
+        ON r.tag_id = t.id
+
+    INNER JOIN active_model_lookup aml
+        ON r.localmodel_id = aml.localmodel_id
+       AND r.device_id = aml.device_id
+
+    WHERE r.rn = 1
+""")
     cur.execute("""CREATE INDEX IF NOT EXISTS idx_dtd_device 
                 ON device_tag_diagnostics (device_id, localmodel_id);""")
     conn.commit()
@@ -523,17 +516,18 @@ def create_device_cross_tag_summary():
             localmodel_id,
             tag_id,
             tag_value,
-            performance,
+            global_rmse,
             outlier_score_value,
             outlier_score
         FROM device_tag_diagnostics
+        WHERE tag_key <> 'All'
     ),
 
     perf_rank AS (
         SELECT *,
         ROW_NUMBER() OVER(
             PARTITION BY device_id, localmodel_id
-            ORDER BY performance DESC
+            ORDER BY global_rmse DESC
         ) AS perf_rank
         FROM base
     ),
@@ -552,8 +546,8 @@ def create_device_cross_tag_summary():
             device_id,
             localmodel_id,
 
-            MAX(performance) AS worst_tag_performance,
-            AVG(performance) AS average_tag_performance,
+            MAX(global_rmse) AS worst_tag_performance,
+            AVG(global_rmse) AS average_tag_performance,
 
             MIN(outlier_score_value) AS worst_tag_outlier,
             AVG(outlier_score_value) AS average_tag_outlier,
@@ -613,7 +607,7 @@ def create_device_cross_tag_summary():
             /* BAD performance but few outliers */
             WHEN agg.average_tag_performance > {rmse['avg']} * 2
                 AND (CAST(outlier_count AS FLOAT)/tag_count) < 0.2
-            THEN 'peer_specific'
+            THEN 'general_performance_specific'
 
 
             /* GOOD performance and few outliers */
@@ -647,7 +641,7 @@ def create_device_cross_tag_summary():
 
     conn.commit()
     conn.close()
-    print("✓ device_cross_tag_diagnostics table created")            
+    print("✓ device_cross_tag_diagnostics table created")                     
 
 def create_all_optimized_tables():
     print("Creating optimized tables...")
@@ -655,15 +649,16 @@ def create_all_optimized_tables():
     
     create_active_model_lookup()
     create_model_performance_pivot()
+    create_model_performance_metrics()
     create_model_performance_trend()
+    create_model_performance_metrics_trend()
+    create_seedmodel_diagnostics()
     create_device_tag_diagnostics()
     create_feature_sensitivity_top3()
-    create_feature_sensitivity_historical()
     create_device_cross_tag_summary()
-    create_version_history_performance()
     create_outlier_classification_table()
     
     print("=" * 60)
     print("All tables created successfully!")
     
-#create_all_optimized_tables()
+create_all_optimized_tables()

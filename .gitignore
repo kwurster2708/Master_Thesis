@@ -23,13 +23,31 @@ WeatherData.sqlite
 __pycache__/
 
 test_environment.py
+Input_Folder.py
+GEval_Prompt.py
 
 parquet_output/
+
+Experiment1/
 Experiment2/
 Experiment3/
 Experiment4/
-Experiment4_Test/
 Experiment5/
-Experiment1/
+
+Device88/
+Device131/
+Device1383/
+Device1456/
+
+Input_Folder1/
+Input_Folder2/
+Input_Folder3/
+Input_Folder4/
+Input_Folder5/
+
+Generated_Evaluation_Prompts_DOCX/
+Expected_Outputs/
+
 pictures/
 anova_outputs/
+anova_outputs_g_eval/
