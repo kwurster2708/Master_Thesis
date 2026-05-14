@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 
 import ollama
-from schema_3 import get_full_schema, get_connection
+from schema_4 import get_full_schema, get_connection
 
 
 # -----------------------------
@@ -75,7 +75,7 @@ def create_logging(model_used, schema, device_id, config_name):
     return log
 
 
-def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment5"):
+def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment4"):
     base_path = Path(base_dir)
 
     safe_model_tag = sanitize_filename(model_tag)
@@ -133,15 +133,6 @@ Step 8: Create practical recommendations.
 Step 9: Write the final explanation for a non-expert industrial user based on the previous steps.
 
 Output Instructions:
-The answer has to be provided in an easy language that a user without a data background can understand. Make sure to provide short and concise answers that answer the questions at hand without unnecessary information. 
-
-What is important:
-* Clarity: Deliver straightforward and easily comprehensible summaries. 
-* Relevance: Ensure insights are directly applicable to the end user. 
-* Actionability: Focus on providing practical suggestions or conclusions. 
-* Use these images together with the schema.
-* Only refer to what is clearly visible in the images.
-
 The answer has to be provided in an easy language that a user without a data background can understand.
 What is important:
 * Clarity: Deliver straightforward and easily comprehensible summaries. 
@@ -193,8 +184,6 @@ def run_llm(model_tag, prompt, image_paths, think=True):
         stream=False,
         options={
             "temperature": 0.4,
-            "top_p": 0.9,
-            "num_predict": 750,
         },
     )
     llm_output = response["message"]["content"]
@@ -209,7 +198,7 @@ def run_llm(model_tag, prompt, image_paths, think=True):
     return llm_output, metadata
 
 
-def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment5"):
+def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment4"):
     model_cfg = MODELS[model_key]
     model_tag = model_cfg["tag"]
     config_name = config["name"]
@@ -227,14 +216,6 @@ def generate_for_device(conn, device_id, model_key, config, output_dir="Experime
     print(f"Image paths sent for device {device_id}: {image_paths}")
 
     try:
-        llm_output = run_llm(
-            model_tag=model_tag,
-            prompt=prompt,
-            image_paths=image_paths,
-            think=model_cfg.get("think", True),
-        )
-        logging_info["status"] = "success"
-    except Exception as e:
         llm_output, metadata = run_llm(
             model_tag=model_tag,
             prompt=prompt,
@@ -267,7 +248,7 @@ def generate_for_device(conn, device_id, model_key, config, output_dir="Experime
     }
 
 
-def run_batch(device_ids, selected_models=None, output_dir="Experiment5"):
+def run_batch(device_ids, selected_models=None, output_dir="Experiment4"):
     conn = get_connection()
     results = []
 
@@ -321,7 +302,7 @@ def parse_args():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="Experiment5",
+        default="Experiment4",
         help="Base output directory for JSON files.",
     )
     return parser.parse_args()

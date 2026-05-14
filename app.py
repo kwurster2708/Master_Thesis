@@ -1,6 +1,6 @@
 #-- Importing necessary libraries --
 import re
-from schema_3 import get_full_schema, get_all_outlier_devices, get_connection
+from schema_1 import get_full_schema, get_all_outlier_devices, get_connection
 import streamlit as st
 import sqlite3
 import ollama
@@ -139,9 +139,10 @@ st.sidebar.header("Filters")
 
 # Filter 1: Outlier selection based on test function
 all_outliers = get_all_outlier_devices(conn)
-outliers = all_outliers if all_outliers else []
+#outliers = all_outliers if all_outliers else []
+outliers = [131, 393, 1456, 3235]
 
-outlier_options = [f"Device {o[0]}" for o in outliers] if outliers else ["No outliers found"]
+outlier_options = [f"Device {o}" for o in outliers] if outliers else ["No outliers found"]
 outlier = st.sidebar.selectbox("Select Device ID", options= ["All"] + outlier_options)
 
 # Get selected outlier info

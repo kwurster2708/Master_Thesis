@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 
 import ollama
-from schema_4 import get_full_schema, get_connection
+from schema_2 import get_full_schema, get_connection
 
 
 # -----------------------------
@@ -60,12 +60,13 @@ def create_logging(model_used, schema, device_id):
     log = {
         "model_used": model_used,
         "included_information": list(schema["inspected_weather_station"].keys()),
+        #"included_information": list(schema.keys()),
         "anomaly_id": f"d{device_id}",
     }
     return log
 
 
-def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment3"):
+def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment2"):
     base_path = Path(base_dir)
 
     safe_model_tag = sanitize_filename(model_tag)
@@ -124,16 +125,8 @@ Step 8: Create practical recommendations.
 Step 9: Write the final explanation for a non-expert industrial user based on the previous steps.
 
 Output Instructions:
-The answer has to be provided in an easy language that a user without a data background can understand. Make sure to provide short and concise answers that answer the questions at hand without unnecessary information. 
-
-What is important:
-* Clarity: Deliver straightforward and easily comprehensible summaries. 
-* Relevance: Ensure insights are directly applicable to the end user. 
-* Actionability: Focus on providing practical suggestions or conclusions. 
-* Use these images together with the schema.
-* Only refer to what is clearly visible in the images.
-
 The answer has to be provided in an easy language that a user without a data background can understand.
+
 What is important:
 * Clarity: Deliver straightforward and easily comprehensible summaries. 
 * Relevance: Ensure insights are directly applicable to the end user. 
@@ -159,8 +152,6 @@ def run_llm(model_tag, prompt, think=True):
         stream=False,
         options={
             "temperature": 0.4,
-            "top_p": 0.9,
-            "num_predict": 750,
         },
     )
     llm_output = response["message"]["content"]
@@ -175,7 +166,7 @@ def run_llm(model_tag, prompt, think=True):
     return llm_output, metadata
 
 
-def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment3"):
+def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment2"):
     model_cfg = MODELS[model_key]
     model_tag = model_cfg["tag"]
     config_name = config["name"]
@@ -222,7 +213,7 @@ def generate_for_device(conn, device_id, model_key, config, output_dir="Experime
     }
 
 
-def run_batch(device_ids, selected_models=None, output_dir="Experiment3"):
+def run_batch(device_ids, selected_models=None, output_dir="Experiment2"):
     conn = get_connection()
     results = []
 
@@ -272,11 +263,10 @@ def parse_args():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="Experiment3",
+        default="Experiment2",
         help="Base output directory for JSON files.",
     )
     return parser.parse_args()
-
 
 def main():
     args = parse_args()
