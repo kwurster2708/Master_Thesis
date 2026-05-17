@@ -1,12 +1,12 @@
 #-- Importing necessary libraries --
 import re
-from schema_1 import get_full_schema, get_all_outlier_devices, get_connection
+from schema_2 import get_full_schema, get_all_outlier_devices, get_connection
 import streamlit as st
 import sqlite3
 import ollama
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime 
 
 #-- Helper Functions --
 def create_logging (model_used, schema, device_id):
