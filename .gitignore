@@ -4,8 +4,6 @@
 node_modules/
 # Ignore Python virtual environment
 .venv/
-# Ignore Ekkono SDK folder
-ekkono-sdk/
 # Ignore build output
 dist/
 build/
@@ -34,11 +32,6 @@ Experiment3/
 Experiment4/
 Experiment5/
 
-Device88/
-Device131/
-Device1383/
-Device1456/
-
 Input_Folder1/
 Input_Folder2/
 Input_Folder3/
@@ -47,7 +40,11 @@ Input_Folder5/
 
 Generated_Evaluation_Prompts_DOCX/
 Expected_Outputs/
-
 pictures/
-anova_outputs/
+
+Evaluation_Schema.xlsx
+Statistical_Comparison.py
+final_experiment_comparison.csv
+final_summary_table.csv
 anova_outputs_g_eval/
+g_eval_statistical_analysis/
