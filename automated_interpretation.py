@@ -1,16 +1,14 @@
+"""
+This script automates the generation of LLM interpretations for a batch of weather stations using different models.
+"""
 import re
 import json
 import argparse
 from pathlib import Path
-from datetime import datetime
 
 import ollama
-from schema_2 import get_full_schema, get_connection
+from schema_2 import get_full_schema, get_connection #change based on experiment used
 
-
-# -----------------------------
-# Configuration
-# -----------------------------
 MODELS = {
     "deepseek": {
         "tag": "deepseek-v3.2:cloud",
@@ -47,10 +45,7 @@ CONFIGURATIONS = [
     },
 ]
 
-
-# -----------------------------
-# Helper functions
-# -----------------------------
+# Generate Helper Functions
 def sanitize_filename(name):
     return re.sub(r'[<>:"/\\|?*]', "_", str(name))
 
@@ -66,7 +61,7 @@ def create_logging(model_used, schema, device_id):
     return log
 
 
-def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment2"):
+def save_experiment_output(llm_output, logging_info, device_id, model_tag, config_name, base_dir="Experiment2"): #change based on experiment used
     base_path = Path(base_dir)
 
     safe_model_tag = sanitize_filename(model_tag)
@@ -85,7 +80,7 @@ def save_experiment_output(llm_output, logging_info, device_id, model_tag, confi
 
     return str(filepath)
 
-
+# Generate Prompt Function
 def generate_prompt(schema_data, device_id):    
     prompt = f"""
 Schema:
@@ -166,7 +161,7 @@ def run_llm(model_tag, prompt, think=True):
     return llm_output, metadata
 
 
-def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment2"):
+def generate_for_device(conn, device_id, model_key, config, output_dir="Experiment2"): #change based on experiment used
     model_cfg = MODELS[model_key]
     model_tag = model_cfg["tag"]
     config_name = config["name"]
@@ -213,7 +208,7 @@ def generate_for_device(conn, device_id, model_key, config, output_dir="Experime
     }
 
 
-def run_batch(device_ids, selected_models=None, output_dir="Experiment2"):
+def run_batch(device_ids, selected_models=None, output_dir="Experiment2"): #change based on experiment used
     conn = get_connection()
     results = []
 

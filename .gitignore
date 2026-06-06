@@ -7,11 +7,6 @@ node_modules/
 # Ignore build output
 dist/
 build/
-# Ignore environment variables
-env
-# Ignore OS-specific files
-DS_Store
-Thumbs.db
 
 #Ignore Databases
 Original_DB.sqlite
@@ -20,31 +15,25 @@ WeatherData.sqlite
 #Ignore Pycache
 __pycache__/
 
-test_environment.py
+#Ignore files only used to create sections used in core files of the thesis
 Input_Folder.py
-GEval_Prompt.py
-
 parquet_output/
 
+#Ignore the Experiment Output and G-EVAL Input Folders
 Experiment1/
 Experiment2/
 Experiment3/
 Experiment4/
-Experiment5/
 
 Input_Folder1/
 Input_Folder2/
 Input_Folder3/
 Input_Folder4/
-Input_Folder5/
 
+#Ignore the folders containing the generated evaluation prompts, expected outputs, and pictures used for the G_EVAL evaluation of the thesis
 Generated_Evaluation_Prompts_DOCX/
 Expected_Outputs/
 pictures/
 
-Evaluation_Schema.xlsx
-Statistical_Comparison.py
-final_experiment_comparison.csv
-final_summary_table.csv
-anova_outputs_g_eval/
+#Ignore the Statistical Analysis Folder containing multiple pictures and tables
 g_eval_statistical_analysis/

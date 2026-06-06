@@ -1,3 +1,8 @@
+"""
+Preparing the data for PowerBI visualizations by extracting relevant tables from the SQLite database, 
+performing necessary transformations, and exporting them as Parquet files for efficient loading into PowerBI. 
+"""
+
 import sqlite3
 import pandas as pd
 import os
@@ -159,7 +164,7 @@ def find_best_reference_devices(conn, device_id):
         best_devices.add(best["device_id"])
     return list(best_devices)
 
-devices = [131, 393, 1456, 3235]
+devices = [131, 393, 1456, 3235] # Just using devices actually used in thesis to reduce runtime
 
 device_dict = {}
 device_list = set(devices)
@@ -172,9 +177,7 @@ device_list = sorted(device_list)
 device_list_sql = to_sql_in(device_list)
 devices_sql = to_sql_in(devices)
 
-# -----------------------
-# 1. Device Classification
-# -----------------------
+# Device classification
 device_classification = pd.read_sql(f"""
 SELECT DISTINCT device_id, outlier_classification
 FROM device_outlier_classification
@@ -185,9 +188,7 @@ ORDER BY device_id
 device_classification.to_parquet(f"{output_dir}/device_classification.parquet", index=False)
 print("✅ Classification table exported to Parquet!")
 
-# -----------------------
-# 2. Tags 
-# -----------------------
+# Tags
 tags = pd.read_sql(f"""
 SELECT DISTINCT dtl.device_id, t.key, t.value
 FROM devicetaglink dtl
@@ -198,9 +199,7 @@ WHERE t.key <> 'All' AND dtl.device_id IN ({devices_sql})
 tags.to_parquet(f"{output_dir}/tags.parquet", index=False)
 print("✅ Tags table exported to Parquet!")
 
-# -----------------------
-# 3. Model Health
-# -----------------------
+# Model Health
 modelhealth = pd.read_sql(f"""
 SELECT
         mh.device_id,
@@ -221,9 +220,7 @@ SELECT
 modelhealth.to_parquet(f"{output_dir}/modelhealth.parquet", index=False)
 print("✅ Model Health table exported to Parquet!")
 
-# -----------------------
-# 4. Local Trend Comparison
-# -----------------------
+# Local RMSE Comparison
 local_frames = []
 for inspected_device, related_devices in device_dict.items():
     comparison_devices = sorted(set([inspected_device] + related_devices))
@@ -251,9 +248,8 @@ if local_frames:
     local_rmse_comparison = pd.concat(local_frames, ignore_index=True)
     local_rmse_comparison.to_parquet(f"{output_dir}/local_rmse_comparison.parquet", index=False)
     print("✅ Local RMSE Comparison table exported to Parquet!")
-# -----------------------
-# 5. Global RMSE Comparison
-# -----------------------
+
+# Global RMSE Comparison
 global_frames = []
 for inspected_device, related_devices in device_dict.items():
     comparison_devices = sorted(set([inspected_device] + related_devices))
@@ -284,9 +280,7 @@ if global_frames:
 global_rmse_comparison.to_parquet(f"{output_dir}/global_rmse_comparison.parquet", index=False)
 print("✅ Global RMSE Comparison table exported to Parquet!")
 
-# -----------------------
-# 6. Feature Sensitivity
-# -----------------------
+# Feature Importance
 feature_frames = []
 
 for inspected_device, related_devices in device_dict.items():
@@ -349,9 +343,7 @@ feature_importance_comparison = pd.concat(feature_frames, ignore_index=True)
 feature_importance_comparison.to_parquet(f"{output_dir}/feature_importance.parquet", index=False)
 print("✅ Feature Importance table exported to Parquet!")
 
-# -----------------------
-# 8. Device Tag Diagnostics
-# -----------------------
+# Device Tag Diagnostics
 diagnostics = pd.read_sql(f"""
 SELECT device_id, tag_value, global_rmse, outlier_score_value, outlier_score
 FROM device_tag_diagnostics
@@ -361,9 +353,7 @@ WHERE device_id IN ({devices_sql})
 diagnostics.to_parquet(f"{output_dir}/device_tag_diagnostics.parquet", index=False)
 print("✅ Device Tag Diagnostics table exported to Parquet!")
 
-# -----------------------
-# 9. Device Cross Tag Summary
-# -----------------------
+# Device Cross Tag Summaries
 cross_tag = pd.read_sql(f"""
 SELECT device_id, problem_pattern, outlier_ratio
 FROM device_cross_tag_summary

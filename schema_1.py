@@ -1,11 +1,12 @@
+"""
+Creating the first schema for the weather station diagnostics with mainy numerical data representation.
+"""
 import sqlite3
-from datetime import datetime
-from unittest import result
 
 def get_connection():
     return sqlite3.connect(r"\Users\Kim_W\Ekkono_Code\WeatherData.sqlite")
 
-#--- Helper functions to get all outlier devices ---#
+# Generate Helper functions
 def get_all_outlier_devices(conn):
     """Get all available device_ids """
     cur = conn.cursor()
@@ -35,8 +36,8 @@ def get_modelhealth_outlier_history(conn, device_id):
     except sqlite3.Error:
         return {} 
 
-# --- FUNCTIONS TO CREATE SCHEMA --- #
-# --- 1. Device Information --- #
+# FUNCTIONS TO CREATE SCHEMA
+# Weather Station Information
 def get_device_information(conn, device_id):
     """Get diagnostic event information"""
     cur = conn.cursor()
@@ -65,7 +66,7 @@ def get_device_information(conn, device_id):
         print(f"Error executing diagnostic event query for Device ID {device_id}")
         return {}
    
-# --- 3.1 Active Model Performance Context --- #
+# Model Performance Context
 def get_global_rmse(conn, device_id):
     """Get global RMSE value"""
     cur = conn.cursor()
@@ -154,7 +155,7 @@ def get_model_performance(conn, device_id):
     except sqlite3.Error as e:
         print(f"Error executing metric information query: {e}")
 
-# --- 4. Feature Sensitivity Context --- #
+# Feature Importance
 def get_feature_sensitivity(conn, device_id):
     """Get feature sensitivity information"""
     cur = conn.cursor()
@@ -185,7 +186,7 @@ def get_feature_sensitivity(conn, device_id):
     except sqlite3.Error:
         return {}
 
-# --- 5. Tag Diagnostics --- #   
+# Tag Diagnostics   
 def get_tag_diagnostics(conn, device_id):
     cur = conn.cursor()
     try:
@@ -328,7 +329,7 @@ def get_seedmodel_diagnostics(conn, tag_id):
     except sqlite3.Error:
         return {}
     
-# --- 6. Cross Tag Diagnostics --- #
+# Cross Tag Diagnostics
 def get_cross_tag_context(conn, device_id):
     """Get outlier context information"""
     cur = conn.cursor()
@@ -356,7 +357,7 @@ def get_cross_tag_context(conn, device_id):
     except sqlite3.Error:
         return {}
 
-# --- SCHEMA GENERATION FUNCTION --- #
+# SCHEMA GENERATION 
 def get_full_schema(conn, device_id, include_model_performance=True, 
                     include_feature_sensitivity=True):
     """Generate full schema based on selected checkboxes"""

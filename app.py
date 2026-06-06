@@ -1,4 +1,10 @@
-#-- Importing necessary libraries --
+"""
+Streamlit App to create prompts and explanations based on different inputs and LLM configurations. 
+The app allows users to select different anomalies and schema information to generate prompts for LLMs and display the output in an interactive way. 
+The app also includes logging functionality to keep track of the different configurations and outputs for later analysis.
+"""
+
+# Import Libraries
 import re
 from schema_3 import get_full_schema, get_all_outlier_devices, get_connection #change based on experiment used
 import streamlit as st
@@ -6,7 +12,7 @@ import ollama
 import json
 from pathlib import Path
 
-#-- Helper Functions --
+# Create Helper Functions
 def create_logging (model_used, schema, device_id):
     log ={"model_used": model_used,
         "included_information": list(schema["to_be_evaluated_weather_station"].keys()),
@@ -61,20 +67,7 @@ MODELS = {
     },
 }
 
-# def get_ollama_models():
-#     try:
-#         response = ollama.list()
-#         models = response.get("models", [])
-        
-#         if not models:
-#             st.warning("No Ollama models found. Install one using: ollama pull <model_name>")
-        
-#         return [model["model"] for model in models]
-    
-#     except Exception as e:
-#         st.error(f"Ollama connection failed: {str(e)}")
-#         return []
-
+# Prompt Creation
 def generate_prompt(schema_data, device_id):
     """Generate prompt based on selected structure and schema data"""     
     structure =f"""
@@ -120,12 +113,9 @@ The output should have the following structure:
 """
     
     return structure
-#-- The Dashboard --
 
-# 1. Data Layer
+# Streamlit App Generation
 conn = get_connection()
-
-# 2. Anomaly Detection Layer
 
 st.set_page_config(page_title="🤖 Master Thesis Project", layout="wide")
 
@@ -135,10 +125,9 @@ st.markdown("An interactive dashboard for using LLMs to explain anomalies in tim
 # Sidebar for filters
 st.sidebar.header("Filters")
 
-# Filter 1: Outlier selection based on test function
 all_outliers = get_all_outlier_devices(conn)
-#outliers = all_outliers if all_outliers else []
-outliers = [131, 393, 1456, 3235]
+outliers = all_outliers if all_outliers else []
+#outliers = [131, 393, 1456, 3235]
 
 outlier_options = [f"Device {o}" for o in outliers] if outliers else ["No outliers found"]
 outlier = st.sidebar.selectbox("Select Device ID", options= ["All"] + outlier_options)
@@ -154,7 +143,7 @@ st.sidebar.header("Schema Selection")
 include_performance = st.sidebar.checkbox("Performance Context", value=True)
 include_feature_sensitivity = st.sidebar.checkbox("Feature Importance", value=True)
 
-# Initialize session state for tracking changes
+# Initializing session state for tracking changes
 if 'prev_outlier' not in st.session_state:
     st.session_state['prev_outlier'] = selected_outlier
 if 'prev_performance' not in st.session_state:
@@ -187,7 +176,7 @@ if selected_outlier:
         include_feature_sensitivity=include_feature_sensitivity 
     )
 
-# 3. Create columns for layout
+# Columns for layout
 left_col, right_col = st.columns([2,2])
 
 # Middle column: Prompt Preview
@@ -196,7 +185,6 @@ with left_col:
     if schema_data:
         prompt_preview = generate_prompt(schema_data, selected_outlier)
         
-        # Force update of session state
         st.session_state["prompt_preview"] = prompt_preview
 
         st.text_area(
@@ -212,7 +200,6 @@ with left_col:
 with right_col:
     st.subheader("LLM Configuration")
     
-    # Get available Ollama models
     ollama_models = [MODELS[model_key]["tag"] for model_key in MODELS.keys()]
     if ollama_models:
         selected_model = st.selectbox("Select Ollama Model", options=ollama_models)
@@ -224,10 +211,9 @@ with right_col:
         if schema_data:
             prompt_preview = generate_prompt(schema_data, selected_outlier)
             
-            #-- Logging Information --
             logs =create_logging(selected_model, schema_data, selected_outlier)
                          
-            #-- Generate LLM Output --
+            # Generate LLM Output
             try:
                 response = ollama.chat(
                     model=selected_model,
@@ -236,7 +222,7 @@ with right_col:
                     stream=False,
                     #tools=[{"type": "web_search"}],
                     options={
-                        "temperature": 0,
+                        "temperature": 0.4,
                     },     
                 )
                 

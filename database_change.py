@@ -1,13 +1,15 @@
+"""
+Improving the database structure and creating optimized tables for a better lookup in the experiments.
+"""
+
 import sqlite3
 import pandas as pd
 import json
-import numpy as np
-from datetime import datetime
 
 def get_connection():
     return sqlite3.connect(r"\Users\Kim_W\Ekkono_Code\WeatherData.sqlite")
 
-# --- Create Helper Functions --- #
+# Generate Helper Functions
 def get_rmse_values():
     """Calculate baseline values (medians) from all models for normalization"""
     conn = get_connection()
@@ -42,10 +44,10 @@ def get_rmse():
 # --- Label Active Model in each device --- #
 """Giving the devices/first models lables according to the outliers
 
-Underperforming (49): Overall Error Score above 1.1 - performing worse than predicting the mean (use overall error score from active model)
-Low Accuracy (84): Overall Error Score 1.1 or below but high RMSE values (for RMSE value use threshold use baseline if 10% higher than baseline - high RMSE)
-Partial Outlier (25): Are outliers for some tags but not all (outlier: warning count above 50% and under 75% and or extreme ratio below 50% and above 25%)
-Full Outlier (1): Good RMSE but highly different from other models (extreme ratio above 50% or warning count above 75%)
+Underperforming: Overall Error Score above 1.1 - performing worse than predicting the mean (use overall error score from active model)
+Low Accuracy: Overall Error Score 1.1 or below but high RMSE values (for RMSE value use threshold use baseline if 10% higher than baseline - high RMSE)
+Partial Outlier: Are outliers for some tags but not all (outlier: warning count above 50% and under 75% and or extreme ratio below 50% and above 25%)
+Full Outlier: Good RMSE but highly different from other models (extreme ratio above 50% or warning count above 75%)
 No Outlier: Does not belong to any of the above categories based on the outlier score value
 
 Outlier based on the active model for the device.
@@ -156,9 +158,7 @@ def create_outlier_classification_table(db_path: str = "WeatherData.sqlite"):
     conn.close()
     print("\n ✓ Table 'device_outlier_classification' created successfully.")
 
-# --- CREATING NEW TABLES IN DATABASE --- #
-
-# --- Device Active Model Table --- #
+# Active Model Table
 def create_active_model_lookup():
     conn = get_connection()
     cur = conn.cursor()
@@ -180,7 +180,7 @@ def create_active_model_lookup():
     conn.close()
     print("✓ active_model_lookup table created")
 
-# --- Active Model Performance Table --- #
+# Model Performance Table 
 def create_model_performance_pivot():
     conn = get_connection()
     cur = conn.cursor()
@@ -207,6 +207,7 @@ def create_model_performance_pivot():
     conn.close()
     print(f"✓ model_performance_pivot table created")
 
+# Seed Model Performance Table
 def create_model_performance_metrics():
     conn = get_connection()
     cur = conn.cursor()
@@ -232,7 +233,7 @@ def create_model_performance_metrics():
     conn.close()
     print(f"✓ model_performance_metrics table created")
 
-# --- Active Model Performance Summary Table --- #
+#  Model Performance Summary Table 
 def create_model_performance_trend():
     """Calculate performance trend based on recent vs older metrics"""
     conn = get_connection()
@@ -357,7 +358,7 @@ def create_model_performance_metrics_trend():
     conn.close()
     print("✓ model_performance_metrics_trend table created")
 
-# --- Model Feature Importance Table --- #
+# Feature Importance Table 
 def create_feature_sensitivity_top3():
     conn = get_connection()
     cur = conn.cursor()
@@ -401,7 +402,7 @@ def create_feature_sensitivity_top3():
     conn.close()
     print("✓ feature_sensitivity_top3 table created")
 
-# --- Device Tag Model Diagnostics Table --- #
+# Tag Model Diagnostics Table 
 def create_seedmodel_diagnostics():  
     conn = get_connection()
     cur = conn.cursor()
@@ -501,7 +502,7 @@ def create_device_tag_diagnostics():
     conn.close()
     print("✓ device_tag_diagnostics table created")
     
-# --- Device Tag Cross Analytics Table --- #
+# Cross Tag Analytics Table 
 def create_device_cross_tag_summary():
     conn = get_connection()
     rmse = get_rmse()

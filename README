@@ -1,0 +1,35 @@
+Master Thesis Code - MSc Data Science (University of Skövde, Sweden)
+
+Title: 
+
+
+Abstract: 
+
+
+This repository contains:
+1. Preparation for the Experiments:
+    - Exploring the Data: EDA.py
+    - Creating additional Tables to improve Data Extraction: database_change.py
+
+2. Generation of the different Schemas for each Experiment:
+    - Experiment 1 - Numerical Data Representation: schema_1.py
+    - Experiment 2 - Numerical Data Representation + Reference Models: schema_2.py
+    - Experiment 3 - Textual Data Representation + Reference Models: schema_3.py
+    - Experiment 4 - Visual Data Representation + Reference Models: schema_4.py
+
+3. Generation of the LLM-generated explanations:
+    - Streamlit App to generate Explanations: app.py
+    - Automated Generation of Explanations: automated_interpretation.py
+    - Automated Generation of Explanations with Pictures: automated_interpretation_pictures.py
+
+4. Dashboard Creation Files:
+    - Preparation of Tables for the Dashboard Creation: PowerBI_Preparation.py
+    - Dashboard PowerBI File: Dashboard.pbix
+
+5. Experiment Evaluation Files:
+    - Generation of the G-EVAL Prompt Files: GEval_Prompt.py
+    - Collection of the Evaluation Outcomes: Evaluation.xlsx
+
+6. Statistical Analysis Files:
+    - The Statistical Comparison between G-Eval and Human Evaluation: Statistical_Comparison.py
+    - The Statistical Analysis of the Experiments: StatAnalysis.py

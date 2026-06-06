@@ -1,10 +1,17 @@
+"""Statistical analysis for thesis experiments.
+This script performs the following analyses:
+1. Descriptive statistics by input, experiment, and model
+2. ANOVA to test the effect of input configuration on G-Eval
+3. ANOVA to test the effect of experiment / representation type on G-Eval
+4. ANOVA to test the effect of model on G-Eval
+8. Correlation analyses between input length, duration, and G-Eval
+"""
 import pandas as pd
 import numpy as np
 
 from scipy import stats
 import statsmodels.formula.api as smf
 from statsmodels.stats.anova import anova_lm
-from statsmodels.stats.multitest import multipletests
 
 df = pd.read_excel("Evaluation.xlsx", sheet_name="Statistical_Analysis")
 
@@ -67,11 +74,7 @@ print("\nMean G-Eval by experiment, model and input:")
 best_combinations = describe_group(["experiment", "model", "input"])
 print(best_combinations)
 
-# ============================================================
-# EFFECT OF INPUT CONFIGURATION
-# FI vs P vs FI + P
-# ============================================================
-
+# Effect of input configuration
 model_input = smf.ols(
     "g_eval ~ C(input) + C(station)",
     data=df
@@ -89,10 +92,7 @@ if p_input < 0.05:
 else:
     print("Input configuration does not have a statistically significant effect on G-Eval.")
     
-# ============================================================
-# EFFECT OF INPUT CONFIGURATION PER EXPERIMENT
-# ============================================================
-
+# Effect of input configuration per experiment
 for exp in df["experiment"].cat.categories:
     temp = df[df["experiment"] == exp]
 
@@ -123,66 +123,17 @@ for exp in df["experiment"].cat.categories:
     else:
         print("Result: Input configuration has no significant effect in this experiment.")
 
-# ============================================================
-# PAIRWISE INPUT COMPARISONS
-# ============================================================
-
-def pairwise_input_tests(data, label):
-    inputs = data["input"].dropna().unique()
-    results = []
-
-    for i in range(len(inputs)):
-        for j in range(i + 1, len(inputs)):
-            a = inputs[i]
-            b = inputs[j]
-
-            group_a = data[data["input"] == a]["g_eval"]
-            group_b = data[data["input"] == b]["g_eval"]
-
-            t, p = stats.ttest_ind(group_a, group_b, equal_var=False)
-
-            results.append({
-                "analysis": label,
-                "comparison": f"{a} vs {b}",
-                "mean_a": group_a.mean(),
-                "mean_b": group_b.mean(),
-                "difference": group_b.mean() - group_a.mean(),
-                "p_uncorrected": p
-            })
-
-    results = pd.DataFrame(results)
-
-    if len(results) > 0:
-        results["p_holm"] = multipletests(
-            results["p_uncorrected"],
-            method="holm"
-        )[1]
-
-    return results
-
-
-print("\nOverall pairwise input comparisons:")
-print(pairwise_input_tests(df, "Overall"))
-
-for exp in df["experiment"].cat.categories:
-    temp = df[df["experiment"] == exp]
-    print(f"\nPairwise input comparisons for {exp}:")
-    print(pairwise_input_tests(temp, exp))
     
-# Example only - adjust this to your actual thesis setup
 representation_map = {
     "Experiment 1": "numerical",
-    "Experiment 2": "numerical + seed",
-    "Experiment 3": "textual",
-    "Experiment 4": "visual"
+    "Experiment 2": "numerical + reference",
+    "Experiment 3": "textual + reference",
+    "Experiment 4": "visual + reference"
 }
 
 df["representation_type"] = df["experiment"].map(representation_map)
 
-# ============================================================
-# EFFECT OF REPRESENTATION TYPE / EXPERIMENT
-# ============================================================
-
+# Effect of experiment / representation type
 model_experiment = smf.ols(
     "g_eval ~ C(experiment) + C(station)",
     data=df
@@ -200,45 +151,8 @@ if p_exp < 0.05:
 else:
     print("Experiment / representation type does not have a statistically significant effect on G-Eval.")
     
-# ============================================================
-# PAIRWISE EXPERIMENT COMPARISONS
-# ============================================================
 
-experiments = df["experiment"].dropna().unique()
-results = []
-
-for i in range(len(experiments)):
-    for j in range(i + 1, len(experiments)):
-        a = experiments[i]
-        b = experiments[j]
-
-        group_a = df[df["experiment"] == a]["g_eval"]
-        group_b = df[df["experiment"] == b]["g_eval"]
-
-        t, p = stats.ttest_ind(group_a, group_b, equal_var=False)
-
-        results.append({
-            "comparison": f"{a} vs {b}",
-            "mean_a": group_a.mean(),
-            "mean_b": group_b.mean(),
-            "difference": group_b.mean() - group_a.mean(),
-            "p_uncorrected": p
-        })
-
-experiment_posthoc = pd.DataFrame(results)
-
-experiment_posthoc["p_holm"] = multipletests(
-    experiment_posthoc["p_uncorrected"],
-    method="holm"
-)[1]
-
-print("\nPairwise experiment comparisons:")
-print(experiment_posthoc.sort_values("p_holm"))
-
-# ============================================================
-# EFFECT OF MODEL OVERALL
-# ============================================================
-
+# Effect of model
 model_model = smf.ols(
     "g_eval ~ C(model) + C(station)",
     data=df
@@ -256,10 +170,7 @@ if p_model < 0.05:
 else:
     print("Model does not have a statistically significant effect on G-Eval.")
     
-# ============================================================
-# EFFECT OF MODEL PER EXPERIMENT
-# ============================================================
-
+# Effect of model per experiment
 for exp in df["experiment"].cat.categories:
     temp = df[df["experiment"] == exp]
 
@@ -295,53 +206,8 @@ for exp in df["experiment"].cat.categories:
     else:
         print("Result: Model has no significant effect in this experiment.")
         
-# ============================================================
-# PAIRWISE MODEL COMPARISONS PER EXPERIMENT
-# ============================================================
-
-def pairwise_model_tests(data, label):
-    models = data["model"].dropna().unique()
-    results = []
-
-    for i in range(len(models)):
-        for j in range(i + 1, len(models)):
-            a = models[i]
-            b = models[j]
-
-            group_a = data[data["model"] == a]["g_eval"]
-            group_b = data[data["model"] == b]["g_eval"]
-
-            t, p = stats.ttest_ind(group_a, group_b, equal_var=False)
-
-            results.append({
-                "analysis": label,
-                "comparison": f"{a} vs {b}",
-                "mean_a": group_a.mean(),
-                "mean_b": group_b.mean(),
-                "difference": group_b.mean() - group_a.mean(),
-                "p_uncorrected": p
-            })
-
-    results = pd.DataFrame(results)
-
-    if len(results) > 0:
-        results["p_holm"] = multipletests(
-            results["p_uncorrected"],
-            method="holm"
-        )[1]
-
-    return results
-
-
-for exp in df["experiment"].cat.categories:
-    temp = df[df["experiment"] == exp]
-    print(f"\nPairwise model comparisons for {exp}:")
-    print(pairwise_model_tests(temp, exp))
     
-# ============================================================
-# CORRELATION: INPUT LENGTH AND DURATION
-# ============================================================
-
+# Correlation input length and duration
 for variable in ["input_length_tokens", "duration_seconds"]:
     pearson_r, pearson_p = stats.pearsonr(df[variable], df["g_eval"])
     spearman_rho, spearman_p = stats.spearmanr(df[variable], df["g_eval"])
@@ -350,10 +216,7 @@ for variable in ["input_length_tokens", "duration_seconds"]:
     print(f"Pearson r = {pearson_r:.3f}, p = {pearson_p:.4f}")
     print(f"Spearman rho = {spearman_rho:.3f}, p = {spearman_p:.4f}")
     
-# ============================================================
-# CORRELATION PER EXPERIMENT
-# ============================================================
-
+# Correlation per experiment
 for exp in df["experiment"].cat.categories:
     temp = df[df["experiment"] == exp]
 
@@ -369,10 +232,7 @@ for exp in df["experiment"].cat.categories:
         print(f"Pearson r = {pearson_r:.3f}, p = {pearson_p:.4f}")
         print(f"Spearman rho = {spearman_rho:.3f}, p = {spearman_p:.4f}")
         
-# ============================================================
-# SIMPLE REGRESSION WITH ALL PREDICTORS
-# ============================================================
-
+# OLS Regression with all variables
 full_model = smf.ols(
     """
     g_eval ~ C(experiment)
@@ -393,10 +253,7 @@ print(full_anova)
 print("\nFull model coefficients:")
 print(full_model.summary())
 
-# ============================================================
-# FINAL SUMMARY TABLE
-# ============================================================
-
+# Final Summary Table
 summary_rows = []
 
 # Input effect
@@ -488,12 +345,7 @@ summary_table = pd.DataFrame(summary_rows)
 print("\nFINAL SUMMARY TABLE")
 print(summary_table)
 
-summary_table.to_csv("final_summary_table.csv", index=False)
-
-# ============================================================
-# FINAL EXPERIMENT COMPARISON TABLE
-# ============================================================
-
+# Final experiment comparison table
 experiment_summary = (
     df.groupby("experiment", observed=True)
     .agg(
@@ -509,5 +361,3 @@ experiment_summary = (
 
 print("\nFINAL EXPERIMENT COMPARISON")
 print(experiment_summary)
-
-experiment_summary.to_csv("final_experiment_comparison.csv", index=False)

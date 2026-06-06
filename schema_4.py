@@ -1,3 +1,6 @@
+"""
+Creating the fourth schema for the weather station diagnostics with mainy visual data representation.
+"""
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -8,7 +11,7 @@ PICTURE_BASE_DIR = Path(r"\Users\Kim_W\Ekkono_Code\pictures")
 def get_connection():
     return sqlite3.connect(r"\Users\Kim_W\Ekkono_Code\WeatherData.sqlite")
 
-#--- Helper functions to get all outlier devices ---#
+# Generate Helper Functions
 
 def get_all_outlier_devices(conn):
     """Get all available device_ids """
@@ -51,7 +54,7 @@ def merge_label_windows(sorted_items, label_fn):
     windows.append((start_month, prev_month, current_label))
     return windows
 
-# --- Pictures --- #
+# Pictures
 def get_performance_pictures(device_id):
     return PICTURE_BASE_DIR/f"performance/d{device_id}_performance.png"
 
@@ -77,7 +80,7 @@ def get_pictures(device_id, include_performance=True, include_feature_importance
     
     return pictures
 
-# --- 1. Weather Station Information --- #
+# Weather Station Information
 def get_device_information(conn, device_id):
     """Get diagnostic event information"""
     cur = conn.cursor()
@@ -156,7 +159,7 @@ def get_functioning_information(conn, device_id):
         print(f"Error executing diagnostic event query for Device ID {device_id}")
         return {}
 
-# --- 4. Tag Diagnostics --- #
+# Tag Diagnostics 
 def get_tag_diagnostics(conn, device_id):
     cur = conn.cursor()
     try:
@@ -254,7 +257,7 @@ def get_seedmodel_diagnostics(conn, tag_id):
     except sqlite3.Error:
         return {}
     
-# --- 5. Cross Tag Diagnostics --- #
+# Cross Tag Diagnostics
 def get_cross_tag_context(conn, device_id):
     """Get outlier context information"""
     cur = conn.cursor()
@@ -282,7 +285,7 @@ def get_cross_tag_context(conn, device_id):
     except sqlite3.Error:
         return {}
 
-# --- Get functioning stations (No Outliers) --- #
+# Get functioning stations (No Outliers) 
 def find_best_reference_devices(conn, device_id):
     cur = conn.cursor()
     # Get evaluated devicetags (exclude 'All')
@@ -463,7 +466,7 @@ def get_functioning_stations_P(conn, best_ids):
     
     return functioning_stations
 
-# --- SCHEMA GENERATION FUNCTION --- #
+# SCHEMA GENERATION FUNCTION 
 def get_full_schema(conn, device_id, include_model_performance=True, 
                     include_feature_sensitivity=True):
     

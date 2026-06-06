@@ -1,16 +1,14 @@
+"""
+This script automates the generation of LLM interpretations for a batch of weather stations using different models.
+"""
 import re
 import json
 import argparse
 from pathlib import Path
-from datetime import datetime
 
 import ollama
-from schema_4 import get_full_schema, get_connection
+from schema_4 import get_full_schema, get_connection 
 
-
-# -----------------------------
-# Configuration
-# -----------------------------
 MODELS = {
     "deepseek": {
         "tag": "deepseek-v3.2:cloud",
@@ -47,10 +45,7 @@ CONFIGURATIONS = [
     },
 ]
 
-
-# -----------------------------
-# Helper functions
-# -----------------------------
+#Generate Helper Functions
 def sanitize_filename(name):
     return re.sub(r'[<>:"/\\|?*]', "_", str(name))
 
@@ -94,6 +89,7 @@ def save_experiment_output(llm_output, logging_info, device_id, model_tag, confi
 
     return str(filepath)
 
+#Generate Prompt Function
 def generate_prompt(schema_data, device_id):    
     prompt = f"""
 Schema:
