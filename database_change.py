@@ -41,7 +41,7 @@ def get_rmse():
     return RMSE
 
 
-# --- Label Active Model in each device --- #
+# Labels:
 """Giving the devices/first models lables according to the outliers
 
 Underperforming: Overall Error Score above 1.1 - performing worse than predicting the mean (use overall error score from active model)
