@@ -4,6 +4,28 @@ Title: Leveraging Large Language Models to Translate XAI and Time-Series Model D
 
 
 Abstract: 
+Machine Learning (ML) model diagnostics provide valuable information about model 
+behaviour and performance but are often difficult to understand for non-expert users 
+that have no experience in data science or ML. The information is often presented 
+in a numerical format or in graphs that are difficult to understand for the end user 
+that needs to make decisions based on the insights derived from the diagnostics. 
+This thesis investigates the use of Large Language Models (LLMs) to transform model 
+diagnostic information into human-centered insights. The main focus of the thesis is 
+how different input configurations and data representations influence the LLM-generated 
+explanation quality, which was explored through multiple comparative experiments. To 
+evaluate the experiment outcomes an evaluation approach combining automatic evaluation 
+and human evaluation is used. The automatic evaluation is based on the G-EVAL framework 
+from Liu et al. (2023) and the human evaluation is performed with weighted scoring. The 
+last part of the thesis involves a user study which assesses whether LLM-generated explanations 
+improve users’ perceived understanding, trust and helpfulness compared to a conventional dashboard.
+
+The results show that the data representation and structure of the prompt has a significant impact on 
+the explanation quality. Numerical and textual representations with time-series data presented in windows 
+outperformed visual data representation and continuous numerical time series data representation. The user 
+study revealed that participants found LLM-generated explanations easier to understand and helpful than a 
+dashboard alone. However, users preferred a combined solution where the LLM-generated explanations provide 
+the initial interpretation and dashboards can be used to investigate further. The thesis contains practical 
+recommendations for the representation of diagnostic information to maximize the quality of generated explanations.
 
 
 This repository contains:
