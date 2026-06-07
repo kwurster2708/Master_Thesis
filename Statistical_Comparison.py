@@ -13,16 +13,6 @@ df["human_eval"] = pd.to_numeric(df["human_eval"], errors="coerce")
 g_eval = df["g_eval"]
 human_eval = df["human_eval"]
 
-# Spearman and Kendall correlation
-spearman_r, spearman_p = stats.spearmanr(human_eval, g_eval)
-kendall_tau, kendall_p = stats.kendalltau(human_eval, g_eval)
-
-print("\nSpearman correlation:")
-print(f"rho = {spearman_r:.3f}, p = {spearman_p:.4f}")
-
-print("\nKendall tau:")
-print(f"tau = {kendall_tau:.3f}, p = {kendall_p:.4f}")
-
 #Tost test
 def paired_tost(x, y, low_eqbound, high_eqbound, alpha=0.05):
     diff = y - x
